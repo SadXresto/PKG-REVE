@@ -1,0 +1,39 @@
+# Build output
+build/
+build-*/
+cmake-build-*/
+out/
+
+# Workspace-local toolchain (downloaded Qt, sysroot, pip venv)
+.tooling/
+.venv-tools/
+aqtinstall.log
+
+# Test/runtime state
+.testdata/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+logs/
+crashes/
+*.log
+
+# Generated sample packages (recreate with tools/make_test_packages.py)
+samples/
+
+# IDE / OS noise
+.vscode/
+.idea/
+*.user
+*.autosave
+.DS_Store
+Thumbs.db
+
+# Compiled artefacts
+*.o
+*.a
+*.so
+*.dll
+*.exe
+*.pdb

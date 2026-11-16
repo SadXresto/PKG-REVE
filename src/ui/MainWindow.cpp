@@ -1,0 +1,1495 @@
+#include "ui/MainWindow.h"
+
+#include "core/AtomicFile.h"
+#include "core/ByteReader.h"
+#include "core/FileSource.h"
+#include "core/FormatUtil.h"
+#include "core/IFormatParser.h"
+#include "core/Logging.h"
+#include "core/ProcessInfo.h"
+#include "data/ThemeManager.h"
+#include "ui/ActivityBar.h"
+#include "ui/CommandPalette.h"
+#include "ui/EditorArea.h"
+#include "ui/FileEditor.h"
+#include "ui/FileExplorer.h"
+#include "ui/HexView.h"
+#include "ui/OutputPanel.h"
+#include "ui/PackageInfoView.h"
+#include "ui/RecentPanel.h"
+#include "ui/SearchPanel.h"
+#include "ui/SettingsDialog.h"
+#include "ui/ThemeEditorDialog.h"
+#include "ui/WelcomePage.h"
+
+#include <QAction>
+#include <QApplication>
+#include <QClipboard>
+#include <QCloseEvent>
+#include <QDesktopServices>
+#include <QDateTime>
+#include <QDir>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QFontDatabase>
+#include <QFutureWatcher>
+#include <QHBoxLayout>
+#include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLabel>
+#include <QMenu>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QMimeData>
+#include <QProgressBar>
+#include <QPushButton>
+#include <QSignalBlocker>
+#include <QSplitter>
+#include <QStackedWidget>
+#include <QStatusBar>
+#include <QSysInfo>
+#include <QThread>
+#include <QTimer>
+#include <QToolButton>
+#include <QUrl>
+#include <QVBoxLayout>
+#include <QtConcurrent>
+
+#include <algorithm>
+
+namespace pkg::ui {
+namespace {
+
+constexpr auto kLogCategory = "ui";
+
+QString keySequenceText(const QKeySequence& sequence)
+{
+    return sequence.toString(QKeySequence::PortableText);
+}
+
+}  // namespace
+
+MainWindow::MainWindow(Database& database, QWidget* parent)
+    : QMainWindow(parent), m_database(database)
+{
+    m_settings = Settings::instance().values();
+    setWindowTitle(QStringLiteral("PKG Studio"));
+    setMinimumSize(900, 600);
+    resize(1280, 820);
+    setAcceptDrops(true);
+    setDockNestingEnabled(false);
+
+    buildUi();
+    buildCommands();
+    buildMenus();
+    buildStatusBar();
+
+    connect(&Logger::instance(), &Logger::recordAdded, m_output, &OutputPanel::queueRecord);
+    m_output->setRecords(Logger::instance().snapshot());
+
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this,
+            [this](const Theme&) { updateWindowTitle(); });
+    connect(m_editors, &EditorArea::currentEditorChanged, this, [this](FileEditor* editor) {
+        updateFileStatus(editor);
+        updateWindowTitle();
+        if (editor != nullptr) {
+            if (auto it = m_analyses.constFind(editor); it != m_analyses.constEnd()) {
+                m_output->setDiagnostics({}, QStringLiteral("Analysis in progress\u2026"));
+            }
+        }
+        refreshShortcuts();
+    });
+    connect(m_editors, &EditorArea::editorClosed, this, [this](FileEditor* editor) {
+        m_analyses.remove(editor);
+        updateFileStatus(currentEditor());
+        updateWindowTitle();
+    });
+    connect(m_editors, &EditorArea::editorCloseRequested, this,
+            &MainWindow::closeEditorWithConfirmation);
+
+    m_memoryTimer = new QTimer(this);
+    m_memoryTimer->setInterval(5000);
+    connect(m_memoryTimer, &QTimer::timeout, this, &MainWindow::updateMemoryStatus);
+    m_memoryTimer->start();
+    updateMemoryStatus();
+    applyEditorPreferences();
+
+    logInfo(QString::fromLatin1(kLogCategory), QStringLiteral("Main window ready"));
+}
+
+MainWindow::~MainWindow()
+{
+    // Cancel nothing explicitly: analysis jobs are bounded header reads. The
+    // watchers are owned by shared pointers and finish without a window.
+    m_analyses.clear();
+}
+
+int MainWindow::openFileCount() const
+{
+    int count = 0;
+    for (int i = 0; i < m_editors->count(); ++i) {
+        if (m_editors->editorAt(i) != nullptr)
+            ++count;
+    }
+    return count;
+}
+
+bool MainWindow::allEditorsAnalyzed() const
+{
+    for (int i = 0; i < m_editors->count(); ++i) {
+        if (FileEditor* editor = m_editors->editorAt(i)) {
+            if (!editor->hasAnalysis())
+                return false;
+        }
+    }
+    return true;
+}
+
+QStringList MainWindow::openPaths() const
+{
+    QStringList paths;
+    for (int i = 0; i < m_editors->count(); ++i) {
+        if (FileEditor* editor = m_editors->editorAt(i))
+            paths << editor->path();
+    }
+    return paths;
+}
+
+void MainWindow::buildUi()
+{
+    auto* central = new QWidget(this);
+    auto* centralLayout = new QHBoxLayout(central);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+
+    m_activity = new ActivityBar(central);
+    m_activity->addItem(QStringLiteral("explorer"), QStringLiteral("Explorer"),
+                        IconKind::Explorer);
+    m_activity->addItem(QStringLiteral("search"), QStringLiteral("Search in project"),
+                        IconKind::Search);
+    m_activity->addItem(QStringLiteral("recent"), QStringLiteral("Recent files"),
+                        IconKind::Recent);
+    m_activity->addStretch();
+    m_activity->addItem(QStringLiteral("themes"), QStringLiteral("Theme editor"),
+                        IconKind::Palette, false);
+    m_activity->addItem(QStringLiteral("settings"), QStringLiteral("Settings"),
+                        IconKind::Settings, false);
+    m_activity->addItem(QStringLiteral("diagnostics"), QStringLiteral("Diagnostics"),
+                        IconKind::Diagnostics, false);
+    m_activity->setCurrent(QStringLiteral("explorer"));
+    centralLayout->addWidget(m_activity);
+
+    m_sideStack = new QStackedWidget(central);
+    m_sideStack->setMinimumWidth(200);
+    m_explorer = new FileExplorer(m_sideStack);
+    m_searchPanel = new SearchPanel(m_sideStack);
+    m_recentPanel = new RecentPanel(m_sideStack);
+    m_sideStack->addWidget(m_explorer);
+    m_sideStack->addWidget(m_searchPanel);
+    m_sideStack->addWidget(m_recentPanel);
+    centralLayout->addWidget(m_sideStack);
+
+    // Left pane: activity bar + stacked side panels. It is one child of the
+    // horizontal splitter so the sidebar width stays user adjustable.
+    auto* leftPane = new QWidget(central);
+    auto* leftLayout = new QHBoxLayout(leftPane);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+    leftLayout->setSpacing(0);
+    leftLayout->addWidget(m_activity);
+    leftLayout->addWidget(m_sideStack, 1);
+
+    m_mainSplitter = new QSplitter(Qt::Horizontal, central);
+    m_mainSplitter->addWidget(leftPane);
+
+    m_verticalSplitter = new QSplitter(Qt::Vertical, m_mainSplitter);
+    m_editors = new EditorArea(m_verticalSplitter);
+    m_verticalSplitter->addWidget(m_editors);
+
+    m_output = new OutputPanel(m_verticalSplitter);
+    m_output->setMinimumHeight(120);
+    m_verticalSplitter->addWidget(m_output);
+    m_verticalSplitter->setStretchFactor(0, 4);
+    m_verticalSplitter->setStretchFactor(1, 1);
+    m_verticalSplitter->setSizes({600, 180});
+    m_verticalSplitter->setChildrenCollapsible(false);
+
+    m_mainSplitter->addWidget(m_verticalSplitter);
+    m_mainSplitter->setStretchFactor(0, 0);
+    m_mainSplitter->setStretchFactor(1, 1);
+    m_mainSplitter->setSizes({290, 990});
+    m_mainSplitter->setChildrenCollapsible(false);
+
+    centralLayout->addWidget(m_mainSplitter, 1);
+    setCentralWidget(central);
+
+    m_welcome = new WelcomePage(m_editors);
+    m_editors->addWelcome(m_welcome);
+
+    connect(m_activity, &ActivityBar::activated, this, &MainWindow::switchSidebar);
+    connect(m_explorer, &FileExplorer::fileActivated, this, [this](const QString& path) {
+        openFile(path);
+    });
+    connect(m_recentPanel, &RecentPanel::entryActivated, this,
+            [this](const QString& path, const QString& kind) {
+                if (kind == QLatin1String("project"))
+                    openProject(path);
+                else
+                    openFile(path);
+            });
+    connect(m_recentPanel, &RecentPanel::removeRequested, this, [this](const QString& path) {
+        m_database.removeRecent(path);
+        refreshRecentPanels();
+    });
+    connect(m_recentPanel, &RecentPanel::clearRequested, this, [this]() {
+        m_database.clearRecent();
+        refreshRecentPanels();
+    });
+    connect(m_searchPanel, &SearchPanel::hitActivated, this,
+            [this](const QString& path, quint64 offset) {
+                if (!openFile(path))
+                    return;
+                if (auto* editor = currentEditor())
+                    editor->goToOffset(offset);
+            });
+    connect(m_welcome, &WelcomePage::openFileRequested, this, [this]() {
+        runCommand(QStringLiteral("file.openFile"));
+    });
+    connect(m_welcome, &WelcomePage::openProjectRequested, this, [this]() {
+        runCommand(QStringLiteral("file.openProject"));
+    });
+    connect(m_welcome, &WelcomePage::newProjectRequested, this, [this]() {
+        runCommand(QStringLiteral("file.newProject"));
+    });
+    connect(m_welcome, &WelcomePage::recentActivated, this,
+            [this](const QString& path, const QString& kind) {
+                if (kind == QLatin1String("project"))
+                    openProject(path);
+                else
+                    openFile(path);
+            });
+    connect(m_output, &OutputPanel::exportLogRequested, this, &MainWindow::exportLog);
+}
+
+void MainWindow::buildStatusBar()
+{
+    QStatusBar* bar = statusBar();
+    bar->setObjectName(QStringLiteral("statusBar"));
+    bar->setSizeGripEnabled(false);
+
+    m_statusMode = new QLabel(QStringLiteral("read-only"), bar);
+    m_statusMode->setToolTip(
+        QStringLiteral("Read-only until you enable byte editing for the file. Saving asks "
+                       "before overwriting and writes a timestamped backup."));
+    bar->addWidget(m_statusMode);
+
+    m_statusFile = new QLabel(QStringLiteral("no file"), bar);
+    bar->addWidget(m_statusFile, 1);
+
+    m_statusFormat = new QLabel(bar);
+    bar->addWidget(m_statusFormat);
+
+    m_statusOffset = new QLabel(bar);
+    bar->addWidget(m_statusOffset);
+
+    m_statusSelection = new QLabel(bar);
+    bar->addWidget(m_statusSelection);
+
+    m_busyBar = new QProgressBar(bar);
+    m_busyBar->setRange(0, 0);
+    m_busyBar->setTextVisible(false);
+    m_busyBar->setFixedWidth(90);
+    m_busyBar->setVisible(false);
+    bar->addPermanentWidget(m_busyBar);
+
+    m_statusMemory = new QLabel(bar);
+    m_statusMemory->setToolTip(QStringLiteral("Process resident memory"));
+    bar->addPermanentWidget(m_statusMemory);
+
+    m_statusTheme = new QLabel(ThemeManager::instance().current().name, bar);
+    bar->addPermanentWidget(m_statusTheme);
+}
+
+QAction* MainWindow::addCommand(const QString& id, const QString& title,
+                                const QString& category,
+                                const QKeySequence& defaultShortcut,
+                                std::function<void()> handler)
+{
+    auto* action = new QAction(title, this);
+    action->setObjectName(id);
+    action->setShortcut(Settings::instance().shortcut(id, defaultShortcut));
+    action->setShortcutContext(Qt::WindowShortcut);
+    connect(action, &QAction::triggered, this, [handler = std::move(handler)]() { handler(); });
+    addAction(action);
+    m_commands.insert(id, action);
+    m_defaultShortcuts.insert(id, defaultShortcut);
+    m_commandCategories.insert(id, category);
+    m_commandOrder.append(id);
+    return action;
+}
+
+void MainWindow::buildCommands()
+{
+    const QString fileCategory = QStringLiteral("File");
+    const QString editCategory = QStringLiteral("Edit");
+    const QString viewCategory = QStringLiteral("View");
+    const QString toolsCategory = QStringLiteral("Tools");
+    const QString helpCategory = QStringLiteral("Help");
+
+    addCommand(QStringLiteral("file.newProject"), QStringLiteral("New project\u2026"), fileCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+N")), [this]() { createProject(); });
+    addCommand(QStringLiteral("file.openProject"), QStringLiteral("Open project folder\u2026"),
+               fileCategory, QKeySequence(QStringLiteral("Ctrl+Shift+O")),
+               [this]() { openProjectDialog(); });
+
+    addCommand(QStringLiteral("file.openFile"), QStringLiteral("Open file\u2026"), fileCategory,
+               QKeySequence(QStringLiteral("Ctrl+O")), [this]() {
+                   const QString path = QFileDialog::getOpenFileName(
+                       this, QStringLiteral("Open file"), m_lastDirectory,
+                       QStringLiteral("All files (*)"));
+                   if (!path.isEmpty())
+                       openFile(path);
+               });
+    addCommand(QStringLiteral("file.save"), QStringLiteral("Save"), fileCategory,
+               QKeySequence(QStringLiteral("Ctrl+S")),
+               [this]() { saveActiveEditor(false); });
+    addCommand(QStringLiteral("file.saveAs"), QStringLiteral("Save as\u2026"), fileCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+S")),
+               [this]() { saveActiveEditor(true); });
+    addCommand(QStringLiteral("file.exportReport"), QStringLiteral("Export analysis report\u2026"),
+               fileCategory, QKeySequence(QStringLiteral("Ctrl+Shift+E")),
+               [this]() { exportActiveReport(); });
+    addCommand(QStringLiteral("file.exit"), QStringLiteral("Exit"), fileCategory,
+               QKeySequence(QStringLiteral("Ctrl+Q")), [this]() { close(); });
+
+    addCommand(QStringLiteral("edit.undo"), QStringLiteral("Undo byte edit"), editCategory,
+               QKeySequence(QStringLiteral("Ctrl+Z")), [this]() {
+                   FileEditor* editor = currentEditor();
+                   if (editor != nullptr && !editor->undoEdit())
+                       statusBar()->showMessage(QStringLiteral("Nothing to undo"), 2000);
+               });
+    addCommand(QStringLiteral("edit.redo"), QStringLiteral("Redo byte edit"), editCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+Z")), [this]() {
+                   FileEditor* editor = currentEditor();
+                   if (editor != nullptr && !editor->redoEdit())
+                       statusBar()->showMessage(QStringLiteral("Nothing to redo"), 2000);
+               });
+    addCommand(QStringLiteral("edit.find"), QStringLiteral("Find in current file\u2026"),
+               editCategory, QKeySequence(QStringLiteral("Ctrl+F")), [this]() {
+                   if (FileEditor* editor = currentEditor())
+                       editor->focusFindBar();
+               });
+    addCommand(QStringLiteral("edit.goto"), QStringLiteral("Go to offset\u2026"), editCategory,
+               QKeySequence(QStringLiteral("Ctrl+G")), [this]() {
+                   if (FileEditor* editor = currentEditor())
+                       editor->goToOffsetInteractive();
+               });
+    addCommand(QStringLiteral("edit.copyHex"), QStringLiteral("Copy selection as hex"),
+               editCategory, QKeySequence(QStringLiteral("Ctrl+Shift+H")), [this]() {
+                   if (FileEditor* editor = currentEditor()) {
+                       const QString text = editor->hexView()->selectionAsHex();
+                       if (!text.isEmpty())
+                           QApplication::clipboard()->setText(text);
+                   }
+               });
+    addCommand(QStringLiteral("edit.copyAscii"), QStringLiteral("Copy selection as ASCII"),
+               editCategory, QKeySequence(QStringLiteral("Ctrl+Shift+A")), [this]() {
+                   if (FileEditor* editor = currentEditor()) {
+                       const QString text = editor->hexView()->selectionAsAscii();
+                       if (!text.isEmpty())
+                           QApplication::clipboard()->setText(text);
+                   }
+               });
+    addCommand(QStringLiteral("edit.selectAll"), QStringLiteral("Select all bytes"), editCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+End")), [this]() {
+                   if (FileEditor* editor = currentEditor())
+                       editor->hexView()->selectAll();
+               });
+
+    addCommand(QStringLiteral("view.explorer"), QStringLiteral("Show explorer"), viewCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+1")), [this]() {
+                   switchSidebar(QStringLiteral("explorer"));
+                   m_activity->setCurrent(QStringLiteral("explorer"));
+               });
+    addCommand(QStringLiteral("view.search"), QStringLiteral("Show project search"), viewCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+F")), [this]() {
+                   switchSidebar(QStringLiteral("search"));
+                   m_activity->setCurrent(QStringLiteral("search"));
+                   m_searchPanel->focusSearch();
+               });
+    addCommand(QStringLiteral("view.recent"), QStringLiteral("Show recent files"), viewCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+R")), [this]() {
+                   switchSidebar(QStringLiteral("recent"));
+                   m_activity->setCurrent(QStringLiteral("recent"));
+               });
+    addCommand(QStringLiteral("view.togglePanel"), QStringLiteral("Toggle output panel"),
+               viewCategory, QKeySequence(QStringLiteral("Ctrl+J")),
+               [this]() { m_output->setVisible(!m_output->isVisible()); });
+    addCommand(QStringLiteral("view.themeEditor"), QStringLiteral("Theme editor\u2026"),
+               viewCategory, QKeySequence(), [this]() { showThemeEditor(); });
+    addCommand(QStringLiteral("view.lightweight"), QStringLiteral("Lightweight mode"),
+               viewCategory, QKeySequence(), [this]() {
+                   m_settings.lightweight = !m_settings.lightweight;
+                   Settings::instance().setValues(m_settings);
+                   applyEditorPreferences();
+                   logInfo(QString::fromLatin1(kLogCategory),
+                           m_settings.lightweight ? QStringLiteral("Lightweight mode enabled")
+                                                  : QStringLiteral("Lightweight mode disabled"));
+               });
+    addCommand(QStringLiteral("view.zoomIn"), QStringLiteral("Increase editor font size"),
+               viewCategory, QKeySequence(QStringLiteral("Ctrl+=")), [this]() {
+                   m_settings.fontSize = std::min(24, m_settings.fontSize + 1);
+                   Settings::instance().setValues(m_settings);
+                   applyEditorPreferences();
+               });
+    addCommand(QStringLiteral("view.zoomOut"), QStringLiteral("Decrease editor font size"),
+               viewCategory, QKeySequence(QStringLiteral("Ctrl+-")), [this]() {
+                   m_settings.fontSize = std::max(7, m_settings.fontSize - 1);
+                   Settings::instance().setValues(m_settings);
+                   applyEditorPreferences();
+               });
+    addCommand(QStringLiteral("view.commandPalette"), QStringLiteral("Command palette\u2026"),
+               viewCategory, QKeySequence(QStringLiteral("Ctrl+Shift+P")),
+               [this]() { showCommandPalette(); });
+
+    addCommand(QStringLiteral("tools.settings"), QStringLiteral("Settings\u2026"), toolsCategory,
+               QKeySequence(QStringLiteral("Ctrl+,")), [this]() { showSettings(); });
+    addCommand(QStringLiteral("tools.exportLog"), QStringLiteral("Export log\u2026"), toolsCategory,
+               QKeySequence(), [this]() { exportLog(); });
+    addCommand(QStringLiteral("tools.dataFolder"), QStringLiteral("Open data folder"),
+               toolsCategory, QKeySequence(), [this]() { openDataDirectory(); });
+    addCommand(QStringLiteral("tools.clearCache"), QStringLiteral("Clear analysis cache"),
+               toolsCategory, QKeySequence(), [this]() { clearAnalysisCache(); });
+    addCommand(QStringLiteral("tools.diagnostics"), QStringLiteral("Diagnostics\u2026"),
+               toolsCategory, QKeySequence(), [this]() { showDiagnosticsDialog(); });
+
+    addCommand(QStringLiteral("help.formats"), QStringLiteral("Supported formats"), helpCategory,
+               QKeySequence(), [this]() { showFormatSupport(); });
+    addCommand(QStringLiteral("help.legal"), QStringLiteral("Legal notice and scope"),
+               helpCategory, QKeySequence(), [this]() { showLegalNotice(); });
+    addCommand(QStringLiteral("help.about"), QStringLiteral("About PKG Studio"), helpCategory,
+               QKeySequence(QStringLiteral("F1")), [this]() { showAbout(); });
+}
+
+void MainWindow::buildMenus()
+{
+    auto* fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
+    fileMenu->addAction(m_commands.value(QStringLiteral("file.newProject")));
+    fileMenu->addAction(m_commands.value(QStringLiteral("file.openProject")));
+    fileMenu->addAction(m_commands.value(QStringLiteral("file.openFile")));
+    fileMenu->addSeparator();
+    fileMenu->addAction(m_commands.value(QStringLiteral("file.save")));
+    fileMenu->addAction(m_commands.value(QStringLiteral("file.saveAs")));
+    fileMenu->addSeparator();
+    fileMenu->addAction(m_commands.value(QStringLiteral("file.exportReport")));
+    fileMenu->addSeparator();
+    fileMenu->addAction(m_commands.value(QStringLiteral("file.exit")));
+
+    auto* editMenu = menuBar()->addMenu(QStringLiteral("&Edit"));
+    editMenu->addAction(m_commands.value(QStringLiteral("edit.undo")));
+    editMenu->addAction(m_commands.value(QStringLiteral("edit.redo")));
+    editMenu->addSeparator();
+    editMenu->addAction(m_commands.value(QStringLiteral("edit.find")));
+    editMenu->addAction(m_commands.value(QStringLiteral("edit.goto")));
+    editMenu->addSeparator();
+    editMenu->addAction(m_commands.value(QStringLiteral("edit.copyHex")));
+    editMenu->addAction(m_commands.value(QStringLiteral("edit.copyAscii")));
+    editMenu->addAction(m_commands.value(QStringLiteral("edit.selectAll")));
+    editMenu->addSeparator();
+    editMenu->addAction(m_commands.value(QStringLiteral("view.commandPalette")));
+
+    auto* viewMenu = menuBar()->addMenu(QStringLiteral("&View"));
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.explorer")));
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.search")));
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.recent")));
+    viewMenu->addSeparator();
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.togglePanel")));
+    QAction* lightweight = m_commands.value(QStringLiteral("view.lightweight"));
+    lightweight->setCheckable(true);
+    lightweight->setChecked(m_settings.lightweight);
+    connect(lightweight, &QAction::toggled, this, [this, lightweight](bool checked) {
+        if (m_settings.lightweight != checked) {
+            m_settings.lightweight = checked;
+            Settings::instance().setValues(m_settings);
+        }
+        applyEditorPreferences();
+    });
+    viewMenu->addAction(lightweight);
+    viewMenu->addSeparator();
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.zoomIn")));
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.zoomOut")));
+    viewMenu->addSeparator();
+    m_themeMenu = viewMenu->addMenu(QStringLiteral("Theme"));
+    rebuildThemeMenu();
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.themeEditor")));
+
+    auto* toolsMenu = menuBar()->addMenu(QStringLiteral("&Tools"));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("tools.settings")));
+    toolsMenu->addSeparator();
+    toolsMenu->addAction(m_commands.value(QStringLiteral("tools.exportLog")));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("tools.dataFolder")));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("tools.clearCache")));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("tools.diagnostics")));
+
+    auto* helpMenu = menuBar()->addMenu(QStringLiteral("&Help"));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.formats")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.legal")));
+    helpMenu->addSeparator();
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.about")));
+}
+
+void MainWindow::rebuildThemeMenu()
+{
+    if (m_themeMenu == nullptr)
+        return;
+    m_themeMenu->clear();
+    ThemeManager& manager = ThemeManager::instance();
+    for (const Theme& theme : manager.themes()) {
+        auto* action = m_themeMenu->addAction(theme.name);
+        action->setCheckable(true);
+        action->setChecked(theme.id == manager.current().id);
+        connect(action, &QAction::triggered, this, [this, id = theme.id]() {
+            m_settings.themeId = id;
+            Settings::instance().setValues(m_settings);
+            applyTheme();
+        });
+    }
+    m_themeMenu->addSeparator();
+    m_themeMenu->addAction(m_commands.value(QStringLiteral("view.themeEditor")));
+}
+
+void MainWindow::refreshShortcuts()
+{
+    for (auto it = m_commands.constBegin(); it != m_commands.constEnd(); ++it) {
+        it.value()->setShortcut(
+            Settings::instance().shortcut(it.key(), m_defaultShortcuts.value(it.key())));
+    }
+}
+
+void MainWindow::runCommand(const QString& id)
+{
+    QAction* action = m_commands.value(id);
+    if (action == nullptr) {
+        logWarning(QString::fromLatin1(kLogCategory),
+                   QStringLiteral("Unknown command '%1'").arg(id));
+        return;
+    }
+    action->trigger();
+}
+
+void MainWindow::showCommandPalette()
+{
+    QList<CommandPalette::Entry> entries;
+    entries.reserve(m_commandOrder.size());
+    for (const QString& id : m_commandOrder) {
+        QAction* action = m_commands.value(id);
+        if (action == nullptr || !action->isEnabled())
+            continue;
+        CommandPalette::Entry entry;
+        entry.id = id;
+        entry.title = action->text();
+        entry.category = m_commandCategories.value(id);
+        entry.shortcut = keySequenceText(action->shortcut());
+        entries.append(entry);
+    }
+
+    CommandPalette palette(entries, this);
+    connect(&palette, &CommandPalette::commandChosen, this, &MainWindow::runCommand);
+    palette.exec();
+}
+
+void MainWindow::switchSidebar(const QString& id)
+{
+    if (id == QLatin1String("settings")) {
+        showSettings();
+        return;
+    }
+    if (id == QLatin1String("themes")) {
+        showThemeEditor();
+        return;
+    }
+    if (id == QLatin1String("diagnostics")) {
+        showDiagnosticsDialog();
+        return;
+    }
+    if (id == QLatin1String("search")) {
+        m_sideStack->setCurrentWidget(m_searchPanel);
+        m_searchPanel->focusSearch();
+        return;
+    }
+    if (id == QLatin1String("recent")) {
+        m_sideStack->setCurrentWidget(m_recentPanel);
+        return;
+    }
+    m_sideStack->setCurrentWidget(m_explorer);
+}
+
+QFont MainWindow::editorFont() const
+{
+    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    if (!m_settings.fontFamily.isEmpty())
+        font.setFamily(m_settings.fontFamily);
+    font.setPointSize(m_settings.fontSize);
+    return font;
+}
+
+HexLayout MainWindow::hexLayout() const
+{
+    HexLayout layout;
+    layout.bytesPerRow = m_settings.hexBytesPerRow;
+    layout.groupSize = m_settings.hexGroupSize;
+    return layout.normalized();
+}
+
+void MainWindow::applyEditorPreferences()
+{
+    const QFont font = editorFont();
+    for (int i = 0; i < m_editors->count(); ++i) {
+        if (FileEditor* editor = m_editors->editorAt(i)) {
+            editor->setEditorFont(font);
+            editor->setHexLayout(hexLayout());
+        }
+    }
+    m_activity->setIconColor(ThemeManager::instance().current()
+                                 .color(QStringLiteral("activityBarText")));
+    if (m_settings.lightweight) {
+        QApplication::setEffectEnabled(Qt::UI_AnimateMenu, false);
+        QApplication::setEffectEnabled(Qt::UI_AnimateCombo, false);
+        QApplication::setEffectEnabled(Qt::UI_AnimateTooltip, false);
+        QApplication::setEffectEnabled(Qt::UI_FadeMenu, false);
+        QApplication::setEffectEnabled(Qt::UI_FadeTooltip, false);
+    }
+}
+
+void MainWindow::applyTheme()
+{
+    ThemeManager& manager = ThemeManager::instance();
+    const Status status = manager.setCurrent(m_settings.themeId);
+    if (!status) {
+        logWarning(QString::fromLatin1(kLogCategory),
+                   QStringLiteral("Theme '%1' not found; falling back to the default")
+                       .arg(m_settings.themeId));
+        m_settings.themeId = manager.current().id;
+    }
+    if (QApplication* app = qobject_cast<QApplication*>(QApplication::instance())) {
+        ThemeManager::apply(manager.current(), *app);
+        app->setFont(editorFont());
+    }
+    m_statusTheme->setText(manager.current().name);
+    applyEditorPreferences();
+    rebuildThemeMenu();
+}
+
+void MainWindow::refreshRecentPanels()
+{
+    const QList<RecentEntry> entries = m_database.recent(m_settings.recentLimit);
+    m_recentPanel->setEntries(entries);
+    m_welcome->setRecent(entries);
+}
+
+void MainWindow::setProjectPath(const QString& path)
+{
+    m_projectPath = path;
+    m_explorer->setRootPath(path);
+    m_searchPanel->setRootPath(path);
+    m_welcome->setProjectName(QFileInfo(path).fileName());
+    if (!path.isEmpty()) {
+        m_settings.lastProject = path;
+        Settings::instance().setValues(m_settings);
+        m_database.addRecent(path, QStringLiteral("project"));
+    }
+    refreshRecentPanels();
+    updateWindowTitle();
+}
+
+void MainWindow::updateWindowTitle()
+{
+    QString title = QStringLiteral("PKG Studio");
+    if (!m_projectPath.isEmpty())
+        title += QStringLiteral(" \u2014 ") + QFileInfo(m_projectPath).fileName();
+    if (FileEditor* editor = currentEditor()) {
+        title += QStringLiteral(" \u2014 ") + QFileInfo(editor->path()).fileName();
+        if (editor->isModified())
+            title += QStringLiteral(" \u25CF");
+    }
+    setWindowTitle(title);
+}
+
+FileEditor* MainWindow::currentEditor() const
+{
+    return m_editors ? m_editors->currentEditor() : nullptr;
+}
+
+bool MainWindow::showAnalysisTabForCurrentEditor()
+{
+    FileEditor* editor = currentEditor();
+    if (editor == nullptr)
+        return false;
+    editor->showAnalysisTab();
+    return true;
+}
+
+void MainWindow::updateFileStatus(FileEditor* editor)
+{
+    if (editor == nullptr) {
+        m_statusFile->setText(QStringLiteral("no file"));
+        m_statusFormat->clear();
+        m_statusOffset->clear();
+        m_statusSelection->clear();
+        updateModeStatus();
+        return;
+    }
+    m_statusFile->setText(QStringLiteral("%1 \u2014 %2")
+                              .arg(QFileInfo(editor->path()).fileName(),
+                                   fmt::humanBytes(editor->fileSize())));
+    m_statusFile->setToolTip(editor->path());
+    updateCursorStatus(editor, editor->hexView()->cursorOffset(),
+                       editor->hexView()->selectionLength());
+    if (editor->hasAnalysis()) {
+        m_statusFormat->setText(editor->analysisInfo().formatName);
+        m_output->setDiagnostics(editor->analysisInfo().warnings, editor->path());
+    } else {
+        m_statusFormat->clear();
+        m_output->setDiagnostics(QStringList{}, QStringLiteral("Analysis in progress…"));
+    }
+    updateModeStatus();
+}
+
+void MainWindow::updateModeStatus()
+{
+    FileEditor* editor = currentEditor();
+    if (editor == nullptr) {
+        m_statusMode->setText(QStringLiteral("read-only"));
+        return;
+    }
+    if (editor->isModified())
+        m_statusMode->setText(QStringLiteral("modified \u25CF"));
+    else if (editor->isEditingEnabled())
+        m_statusMode->setText(QStringLiteral("editing"));
+    else
+        m_statusMode->setText(QStringLiteral("read-only"));
+}
+
+void MainWindow::updateCursorStatus(FileEditor* editor, quint64 offset, quint64 selectionLength)
+{
+    if (editor == nullptr)
+        return;
+    m_statusOffset->setText(QStringLiteral("offset %1").arg(fmt::hexPrefixed(offset, 8)));
+    if (selectionLength > 1)
+        m_statusSelection->setText(QStringLiteral("%1 bytes selected").arg(selectionLength));
+    else
+        m_statusSelection->clear();
+}
+
+void MainWindow::updateMemoryStatus()
+{
+    const auto resident = sysinfo::currentResidentBytes();
+    if (resident)
+        m_statusMemory->setText(QStringLiteral("RSS %1").arg(fmt::humanBytes(resident.value())));
+    else
+        m_statusMemory->setText(QStringLiteral("RSS n/a"));
+}
+
+void MainWindow::setBusy(bool busy, const QString& message)
+{
+    if (m_busyBar != nullptr)
+        m_busyBar->setVisible(busy);
+    if (busy)
+        m_statusMode->setText(message.isEmpty() ? QStringLiteral("working\u2026") : message);
+    else
+        updateModeStatus();
+}
+
+void MainWindow::startAnalysis(FileEditor* editor, std::shared_ptr<HexDocument> document)
+{
+    if (editor == nullptr || !document)
+        return;
+
+    const QString path = document->path();
+    const quint64 size = document->size();
+    const QFileInfo info(path);
+    const qint64 modified = info.lastModified().toMSecsSinceEpoch();
+
+    const auto cached = m_database.cachedAnalysis(path, size, modified);
+    if (cached) {
+        const QJsonDocument cachedJson = QJsonDocument::fromJson(cached->payload);
+        auto infoResult = PackageInfo::fromJson(cachedJson.object());
+        if (infoResult) {
+            editor->setAnalysis(infoResult.value());
+            m_output->setDiagnostics(infoResult.value().warnings, path);
+            m_statusFormat->setText(infoResult.value().formatName);
+            logInfo(QString::fromLatin1(kLogCategory),
+                    QStringLiteral("Analysis cache hit for %1").arg(path));
+            return;
+        }
+        logWarning(QString::fromLatin1(kLogCategory),
+                   QStringLiteral("Discarding invalid cached analysis for %1").arg(path));
+    }
+
+    ++m_activeAnalyses;
+    setBusy(true, QStringLiteral("Analyzing %1\u2026").arg(QFileInfo(path).fileName()));
+
+    auto watcher = std::make_shared<QFutureWatcher<Result<PackageInfo>>>();
+    m_analyses.insert(editor, watcher);
+
+    QPointer<FileEditor> guard(editor);
+    connect(watcher.get(), &QFutureWatcher<Result<PackageInfo>>::finished, this,
+            [this, guard, watcher, path, size, modified]() {
+                m_activeAnalyses = std::max(0, m_activeAnalyses - 1);
+                setBusy(m_activeAnalyses > 0,
+                        m_activeAnalyses > 0 ? QStringLiteral("Analyzing\u2026")
+                                             : QStringLiteral("read-only"));
+                if (guard) {
+                    m_analyses.remove(guard.data());
+                    const Result<PackageInfo> result = watcher->result();
+                    if (!result) {
+                        const QString message =
+                            result.error().detail.isEmpty()
+                                ? result.error().message
+                                : QStringLiteral("%1 (%2)")
+                                      .arg(result.error().message, result.error().detail);
+                        guard->setAnalysisError(message);
+                        m_output->setDiagnostics({message}, path);
+                        logError(QString::fromLatin1(kLogCategory),
+                                 QStringLiteral("Analysis failed for %1: %2").arg(path, message));
+                        return;
+                    }
+
+                    const PackageInfo& package = result.value();
+                    guard->setAnalysis(package);
+                    m_output->setDiagnostics(package.warnings, path);
+                    if (guard.data() == m_editors->currentEditor())
+                        m_statusFormat->setText(package.formatName);
+
+                    const QByteArray payload =
+                        QJsonDocument(package.toJson()).toJson(QJsonDocument::Compact);
+                    m_database.cacheAnalysis(path, size, modified, package.formatName, payload);
+                    m_database.trimAnalysisCache(300);
+
+                    logInfo(QString::fromLatin1(kLogCategory),
+                            QStringLiteral("Analyzed %1 as %2 (%3 warning(s))")
+                                .arg(path, package.formatName)
+                                .arg(package.warnings.size()));
+                }
+            });
+
+    CancelToken token;
+    watcher->setFuture(QtConcurrent::run([document, token]() {
+        return ParserRegistry::instance().analyze(document->source(), token);
+    }));
+}
+
+bool MainWindow::openFile(const QString& path)
+{
+    if (path.isEmpty())
+        return false;
+    const QFileInfo info(path);
+    const QString absolute = info.absoluteFilePath();
+
+    if (auto* existing = m_editors->editorForPath(absolute)) {
+        m_editors->setCurrentWidget(existing);
+        return true;
+    }
+
+    auto source = FileSource::open(absolute);
+    if (!source) {
+        const QString message = source.error().detail.isEmpty()
+                                    ? source.error().message
+                                    : QStringLiteral("%1 (%2)").arg(source.error().message,
+                                                                   source.error().detail);
+        QMessageBox::warning(this, QStringLiteral("Cannot open file"), message);
+        logError(QString::fromLatin1(kLogCategory),
+                 QStringLiteral("Cannot open %1: %2").arg(absolute, message));
+        return false;
+    }
+
+    auto document = std::make_shared<HexDocument>(std::move(source.value()));
+    auto* editor = new FileEditor(document, this);
+    editor->setEditorFont(editorFont());
+    editor->setHexLayout(hexLayout());
+
+    connect(editor, &FileEditor::cursorMoved, this, [this, editor](quint64 offset) {
+        if (editor == m_editors->currentEditor())
+            updateCursorStatus(editor, offset, editor->hexView()->selectionLength());
+    });
+    connect(editor, &FileEditor::selectionChanged, this,
+            [this, editor](quint64, quint64 length) {
+                if (editor == m_editors->currentEditor())
+                    updateCursorStatus(editor, editor->hexView()->cursorOffset(), length);
+            });
+    connect(editor, &FileEditor::analysisExportRequested, this,
+            &MainWindow::exportActiveReport);
+    connect(editor, &FileEditor::modificationChanged, this, [this, editor](bool) {
+        m_editors->updateTitle(editor);
+        if (editor == currentEditor()) {
+            updateModeStatus();
+            updateWindowTitle();
+        }
+    });
+    connect(editor, &FileEditor::pathChanged, this, [this, editor](const QString&) {
+        m_editors->updateTitle(editor);
+        if (editor == currentEditor()) {
+            updateFileStatus(editor);
+            updateWindowTitle();
+        }
+    });
+
+    m_editors->addEditor(editor);
+    m_lastDirectory = info.absolutePath();
+    m_database.addRecent(absolute, QStringLiteral("file"));
+    refreshRecentPanels();
+    updateFileStatus(editor);
+    updateWindowTitle();
+
+    logInfo(QString::fromLatin1(kLogCategory),
+            QStringLiteral("Opened %1 (%2 bytes)").arg(absolute).arg(document->size()));
+
+    startAnalysis(editor, document);
+    return true;
+}
+
+void MainWindow::openProject(const QString& path)
+{
+    const QFileInfo info(path);
+    if (!info.exists() || !info.isDir()) {
+        QMessageBox::warning(this, QStringLiteral("Cannot open project"),
+                             QStringLiteral("%1 is not a folder.").arg(path));
+        return;
+    }
+    setProjectPath(info.absoluteFilePath());
+    switchSidebar(QStringLiteral("explorer"));
+    m_activity->setCurrent(QStringLiteral("explorer"));
+    m_lastDirectory = info.absolutePath();
+    logInfo(QString::fromLatin1(kLogCategory),
+            QStringLiteral("Project opened: %1").arg(m_projectPath));
+}
+
+void MainWindow::createProject()
+{
+    const QString parent = QFileDialog::getExistingDirectory(
+        this, QStringLiteral("Choose a parent folder for the new project"), m_lastDirectory);
+    if (parent.isEmpty())
+        return;
+
+    bool ok = false;
+    const QString name = QInputDialog::getText(
+        this, QStringLiteral("New project"), QStringLiteral("Folder name:"),
+        QLineEdit::Normal, QStringLiteral("new-project"), &ok);
+    if (!ok || name.trimmed().isEmpty())
+        return;
+
+    const QString target = QDir(parent).filePath(name.trimmed());
+    if (QFileInfo::exists(target)) {
+        QMessageBox::warning(this, QStringLiteral("Cannot create project"),
+                             QStringLiteral("A file or folder already exists at %1").arg(target));
+        return;
+    }
+    if (!QDir().mkpath(target)) {
+        QMessageBox::warning(this, QStringLiteral("Cannot create project"),
+                             QStringLiteral("The folder could not be created."));
+        logError(QString::fromLatin1(kLogCategory),
+                 QStringLiteral("Cannot create project folder %1").arg(target));
+        return;
+    }
+    logInfo(QString::fromLatin1(kLogCategory), QStringLiteral("Created project %1").arg(target));
+    openProject(target);
+}
+
+void MainWindow::openProjectDialog()
+{
+    const QString directory = QFileDialog::getExistingDirectory(
+        this, QStringLiteral("Open project folder"), m_lastDirectory);
+    if (!directory.isEmpty())
+        openProject(directory);
+}
+
+void MainWindow::showWelcome()
+{
+    m_editors->setCurrentWidget(m_welcome);
+    updateFileStatus(nullptr);
+    updateWindowTitle();
+}
+
+void MainWindow::showSettings()
+{
+    QList<SettingsDialog::ActionInfo> actions;
+    for (const QString& id : m_commandOrder) {
+        const QAction* action = m_commands.value(id);
+        if (action == nullptr)
+            continue;
+        SettingsDialog::ActionInfo info;
+        info.id = id;
+        info.title = action->text();
+        info.category = m_commandCategories.value(id);
+        info.defaultShortcut = m_defaultShortcuts.value(id);
+        actions.append(info);
+    }
+
+    SettingsDialog dialog(m_settings, actions, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    if (dialog.shortcutsWereReset())
+        Settings::instance().resetShortcuts();
+
+    const QHash<QString, QKeySequence> overrides = dialog.shortcutOverrides();
+    for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it) {
+        if (it.value().isEmpty())
+            Settings::instance().setShortcut(it.key(), QKeySequence());
+        else if (it.value() != m_defaultShortcuts.value(it.key()))
+            Settings::instance().setShortcut(it.key(), it.value());
+        else
+            Settings::instance().setShortcut(it.key(), QKeySequence());
+    }
+
+    m_settings = dialog.values();
+    Settings::instance().setValues(m_settings);
+    Logger::instance().setMinLevel(m_settings.logLevel);
+    Logger::instance().setFileLoggingEnabled(m_settings.fileLogging);
+
+    refreshShortcuts();
+    applyTheme();
+    applyEditorPreferences();
+
+    QAction* lightweight = m_commands.value(QStringLiteral("view.lightweight"));
+    if (lightweight != nullptr && lightweight->isChecked() != m_settings.lightweight) {
+        QSignalBlocker blocker(lightweight);
+        lightweight->setChecked(m_settings.lightweight);
+    }
+
+    logInfo(QString::fromLatin1(kLogCategory), QStringLiteral("Settings applied"));
+}
+
+void MainWindow::showThemeEditor()
+{
+    ThemeManager& manager = ThemeManager::instance();
+    Theme base = manager.current();
+    base.id = base.id + QStringLiteral(".custom");
+    base.name = base.name + QStringLiteral(" (custom)");
+
+    ThemeEditorDialog dialog(base, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    Theme theme = dialog.theme();
+    const Status saved = manager.saveUserTheme(theme);
+    if (!saved) {
+        QMessageBox::warning(this, QStringLiteral("Cannot save theme"),
+                             saved.error().detail.isEmpty() ? saved.error().message
+                                                            : saved.error().detail);
+        return;
+    }
+    const Status applied = manager.setCurrent(theme.id);
+    if (!applied)
+        logWarning(QString::fromLatin1(kLogCategory),
+                   QStringLiteral("Custom theme could not be applied: %1")
+                       .arg(applied.error().message));
+    m_settings.themeId = theme.id;
+    Settings::instance().setValues(m_settings);
+    applyTheme();
+    logInfo(QString::fromLatin1(kLogCategory),
+            QStringLiteral("Custom theme saved: %1").arg(theme.id));
+}
+
+QString MainWindow::backupPathFor(const QString& path) const
+{
+    const QFileInfo info(path);
+    const QString directory = info.absolutePath();
+    const QString stamp =
+        QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+    const QString base = QStringLiteral("%1.pkgstudio-backup-%2")
+                             .arg(info.fileName(), stamp);
+    QString candidate = QDir(directory).filePath(base + QStringLiteral(".bak"));
+    int suffix = 2;
+    while (QFileInfo::exists(candidate) && suffix < 100) {
+        candidate =
+            QDir(directory).filePath(QStringLiteral("%1-%2.bak").arg(base).arg(suffix));
+        ++suffix;
+    }
+    return candidate;
+}
+
+void MainWindow::saveActiveEditor(bool saveAs)
+{
+    FileEditor* editor = currentEditor();
+    if (editor == nullptr) {
+        statusBar()->showMessage(QStringLiteral("Open a file before saving"), 3000);
+        return;
+    }
+    saveEditor(editor, saveAs);
+}
+
+bool MainWindow::saveEditor(FileEditor* editor, bool saveAs)
+{
+    if (editor == nullptr)
+        return false;
+
+    if (!saveAs && !editor->isModified()) {
+        statusBar()->showMessage(QStringLiteral("No unsaved changes"), 3000);
+        return true;
+    }
+
+    QString target = editor->path();
+    if (saveAs) {
+        const QString chosen = QFileDialog::getSaveFileName(
+            this, QStringLiteral("Save file as"), target,
+            QStringLiteral("All files (*)"));
+        if (chosen.isEmpty())
+            return false;
+        target = chosen;
+    }
+    if (target.isEmpty())
+        return false;
+
+    const QFileInfo targetInfo(target);
+    const bool overwriting = targetInfo.exists();
+    const QString backupPath = backupPathFor(target);
+
+    if (overwriting) {
+        if (m_settings.confirmWrites) {
+            QMessageBox box(QMessageBox::Warning, QStringLiteral("Overwrite file?"),
+                            QStringLiteral("<b>%1</b> already exists.")
+                                .arg(targetInfo.fileName().toHtmlEscaped()),
+                            QMessageBox::NoButton, this);
+            box.setTextFormat(Qt::RichText);
+            box.setInformativeText(
+                QStringLiteral("Saving replaces its contents atomically, after writing a backup "
+                               "of the current file to:\n%1\n\nThis cannot be undone once the "
+                               "original is replaced.")
+                    .arg(backupPath));
+            auto* overwriteButton =
+                box.addButton(QStringLiteral("Overwrite"), QMessageBox::DestructiveRole);
+            auto* cancelButton = box.addButton(QMessageBox::Cancel);
+            box.setDefaultButton(cancelButton);
+            box.exec();
+            if (box.clickedButton() != overwriteButton)
+                return false;
+        }
+
+        auto backup = atomic::backupFile(target, backupPath);
+        if (!backup) {
+            const QString detail = backup.error().detail.isEmpty()
+                                       ? backup.error().message
+                                       : backup.error().detail;
+            QMessageBox::critical(this, QStringLiteral("Cannot write backup"),
+                                  QStringLiteral("The original file was not modified.\n\n%1")
+                                      .arg(detail));
+            logError(QString::fromLatin1(kLogCategory),
+                     QStringLiteral("Backup failed for %1: %2").arg(target, detail));
+            return false;
+        }
+        logInfo(QString::fromLatin1(kLogCategory),
+                QStringLiteral("Backup written to %1").arg(backupPath));
+    }
+
+    const Result<quint64> written = editor->saveTo(target);
+    if (!written) {
+        const QString detail = written.error().detail.isEmpty()
+                                   ? written.error().message
+                                   : written.error().detail;
+        QMessageBox::critical(this, QStringLiteral("Cannot save file"),
+                              QStringLiteral("%1\n\nThe original file was left untouched.")
+                                  .arg(detail));
+        logError(QString::fromLatin1(kLogCategory),
+                 QStringLiteral("Save failed for %1: %2").arg(target, detail));
+        return false;
+    }
+
+    m_editors->updateTitle(editor);
+    if (editor == currentEditor())
+        updateFileStatus(editor);
+    updateWindowTitle();
+    m_lastDirectory = targetInfo.absolutePath();
+    m_database.addRecent(target, QStringLiteral("file"));
+    refreshRecentPanels();
+
+    const QString message = QStringLiteral("Saved %1 (%2)")
+                                .arg(targetInfo.fileName(), fmt::humanBytes(written.value()));
+    statusBar()->showMessage(message, 5000);
+    logInfo(QString::fromLatin1(kLogCategory),
+            QStringLiteral("Saved %1 (%2 bytes)").arg(target).arg(written.value()));
+
+    // The bytes changed, so refresh the format analysis for the edited file.
+    startAnalysis(editor, editor->document());
+    return true;
+}
+
+bool MainWindow::maybeSaveEditor(FileEditor* editor)
+{
+    if (editor == nullptr || !editor->isModified())
+        return true;
+
+    QMessageBox box(QMessageBox::Warning, QStringLiteral("Unsaved byte edits"),
+                    QStringLiteral("%1 has unsaved byte edits.")
+                        .arg(QFileInfo(editor->path()).fileName()),
+                    QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, this);
+    box.setDefaultButton(QMessageBox::Save);
+    box.setInformativeText(
+        QStringLiteral("Save overwrites the file after a confirmation and writes a timestamped "
+                       "backup. Discard throws the edits away."));
+    switch (box.exec()) {
+    case QMessageBox::Save:
+        return saveEditor(editor, false);
+    case QMessageBox::Discard:
+        return true;
+    default:
+        return false;
+    }
+}
+
+void MainWindow::closeEditorWithConfirmation(FileEditor* editor)
+{
+    if (maybeSaveEditor(editor))
+        m_editors->closeEditor(editor);
+}
+
+void MainWindow::exportActiveReport()
+{
+    FileEditor* editor = currentEditor();
+    if (editor == nullptr) {
+        QMessageBox::information(this, QStringLiteral("Export report"),
+                                 QStringLiteral("Open a file first."));
+        return;
+    }
+    const QString report = editor->analysisReport();
+    if (report.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("Export report"),
+                                 QStringLiteral("No analysis is available for this file yet."));
+        return;
+    }
+    const QString suggested =
+        QDir(m_lastDirectory).filePath(QFileInfo(editor->path()).fileName() +
+                                       QStringLiteral(".analysis.txt"));
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("Export analysis report"), suggested,
+        QStringLiteral("Text report (*.txt)"));
+    if (path.isEmpty())
+        return;
+
+    const Status written = atomic::writeFile(path, report.toUtf8());
+    if (!written) {
+        QMessageBox::warning(this, QStringLiteral("Cannot export report"),
+                             written.error().detail.isEmpty() ? written.error().message
+                                                              : written.error().detail);
+        return;
+    }
+    logInfo(QString::fromLatin1(kLogCategory),
+            QStringLiteral("Report exported to %1").arg(path));
+}
+
+void MainWindow::exportLog()
+{
+    const QString suggested = QDir(m_lastDirectory).filePath(QStringLiteral("pkgstudio.log"));
+    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Export log"),
+                                                     suggested,
+                                                     QStringLiteral("Log file (*.log *.txt)"));
+    if (path.isEmpty())
+        return;
+
+    QString text;
+    for (const LogRecord& record : Logger::instance().snapshot()) {
+        text += QStringLiteral("%1 [%2] [%3] %4\n")
+                    .arg(record.timestamp.toString(Qt::ISODateWithMs),
+                         Logger::levelName(record.level), record.category, record.message);
+    }
+    const Status written = atomic::writeFile(path, text.toUtf8());
+    if (!written) {
+        QMessageBox::warning(this, QStringLiteral("Cannot export log"),
+                             written.error().detail.isEmpty() ? written.error().message
+                                                              : written.error().detail);
+        return;
+    }
+    logInfo(QString::fromLatin1(kLogCategory), QStringLiteral("Log exported to %1").arg(path));
+}
+
+void MainWindow::openDataDirectory()
+{
+    QDesktopServices::openUrl(QUrl::fromLocalFile(Settings::dataDirectory()));
+}
+
+void MainWindow::clearAnalysisCache()
+{
+    if (m_database.isOpen())
+        m_database.clearAnalysisCache();
+    logInfo(QString::fromLatin1(kLogCategory), QStringLiteral("Analysis cache cleared"));
+    QMessageBox::information(this, QStringLiteral("Analysis cache"),
+                             QStringLiteral("Cached analyses were cleared. Files will be "
+                                            "analyzed again when opened."));
+}
+
+void MainWindow::showDiagnosticsDialog()
+{
+    const auto resident = sysinfo::currentResidentBytes();
+    QStringList lines;
+    lines << QStringLiteral("PKG Studio %1").arg(QApplication::applicationVersion());
+    lines << QStringLiteral("Qt: %1 (built with %2)")
+                 .arg(QString::fromLatin1(qVersion()), QString::fromLatin1(QT_VERSION_STR));
+    lines << QStringLiteral("Operating system: %1").arg(sysinfo::operatingSystem());
+    lines << QStringLiteral("CPU: %1 (%2 logical cores)")
+                 .arg(sysinfo::cpuDescription())
+                 .arg(sysinfo::logicalCpuCount());
+    lines << QStringLiteral("Total RAM: %1")
+                 .arg(sysinfo::totalRamBytes() > 0
+                          ? fmt::humanBytes(sysinfo::totalRamBytes())
+                          : QStringLiteral("unknown"));
+    lines << QStringLiteral("Resident memory: %1")
+                 .arg(resident ? fmt::humanBytes(resident.value())
+                               : QStringLiteral("unavailable"));
+    lines << QStringLiteral("Registers parsers: %1")
+                 .arg(ParserRegistry::instance().parserIds().join(QStringLiteral(", ")));
+    lines << QStringLiteral("Data directory: %1").arg(Settings::dataDirectory());
+    lines << QStringLiteral("Log file: %1").arg(Logger::instance().logFilePath());
+    lines << QStringLiteral("Database: %1 (schema v%2)")
+                 .arg(m_database.path())
+                 .arg(m_database.schemaVersion());
+    lines << QStringLiteral("Analysis cache entries: %1").arg(m_database.analysisCacheCount());
+    lines << QStringLiteral("Open documents: %1").arg(openFileCount());
+
+    QMessageBox box(QMessageBox::Information, QStringLiteral("Diagnostics"),
+                    lines.join(QLatin1Char('\n')), QMessageBox::Ok, this);
+    box.setDetailedText(QStringLiteral(
+        "Diagnostics are local only. PKG Studio has no telemetry and never uploads "
+        "files or usage data."));
+    box.exec();
+}
+
+void MainWindow::showFormatSupport()
+{
+    const QString text =
+        QStringLiteral(
+            "Formats verified by signature-matched parsers and automated tests:\n\n"
+            "\u2022 ELF (32/64-bit, both byte orders): header, machine, entry point, "
+            "program headers, PT_INTERP.\n"
+            "\u2022 PE/COFF: DOS header, COFF header, optional header (PE32/PE32+), "
+            "section table.\n"
+            "\u2022 ZIP and Android APK: central directory listing, manifest presence "
+            "(binary XML is not decoded).\n"
+            "\u2022 PSP/PS Vita PKG: documented plain-text header fields only.\n"
+            "\u2022 PS4 PKG: 0x1000 byte container header fields only.\n\n"
+            "Not supported: PS5 PKG layout (unverified, not claimed), decryption, "
+            "content extraction, DRM or console security bypass, and any modification "
+            "of protected commercial content.\n\n"
+            "Unrecognized files are shown as raw bytes with an honest notice instead "
+            "of a guessed format.");
+    QMessageBox::information(this, QStringLiteral("Supported formats"), text);
+}
+
+void MainWindow::showLegalNotice()
+{
+    const QString text =
+        QStringLiteral(
+            "PKG Studio is an analysis tool for files you own or are authorized to "
+            "inspect, such as homebrew packages, public test files and your own builds.\n\n"
+            "It does not decrypt protected commercial packages, does not bypass console "
+            "security or DRM, and does not extract copyrighted content. A PKG Studio "
+            "licence grants no rights to third-party material.\n\n"
+            "Nothing is uploaded. Logs and crash reports stay on this computer, and crash "
+            "reports contain no file contents or paths.");
+    QMessageBox::information(this, QStringLiteral("Legal notice and scope"), text);
+}
+
+void MainWindow::showAbout()
+{
+    const QString text =
+        QStringLiteral("<h3>PKG Studio %1</h3>"
+                       "<p>Package analysis, metadata inspection and authorized binary "
+                       "development.</p>"
+                       "<p>Qt %2 \u00b7 C++20 \u00b7 %3</p>"
+                       "<p>This build covers the desktop shell, the format analysis core and "
+                       "the hex workspace with opt-in byte editing, undo/redo and backup-on-save. "
+                       "Disassembly, debugging and the plugin SDK are planned and not yet "
+                       "present.</p>")
+            .arg(QApplication::applicationVersion(), QString::fromLatin1(qVersion()),
+                 QSysInfo::prettyProductName());
+    QMessageBox box(QMessageBox::Information, QStringLiteral("About PKG Studio"), text,
+                    QMessageBox::Ok, this);
+    box.setTextFormat(Qt::RichText);
+    box.exec();
+}
+
+void MainWindow::restoreSession()
+{
+    refreshRecentPanels();
+    if (!m_settings.restoreSession)
+        return;
+    const QJsonObject session = m_database.session(QStringLiteral("main"));
+    if (session.isEmpty())
+        return;
+
+    const QString project = session.value(QStringLiteral("project")).toString();
+    if (!project.isEmpty() && QFileInfo(project).isDir())
+        openProject(project);
+
+    for (const QJsonValue& value : session.value(QStringLiteral("files")).toArray()) {
+        const QString path = value.toString();
+        if (!path.isEmpty() && QFileInfo(path).isFile())
+            openFile(path);
+    }
+    const QString active = session.value(QStringLiteral("active")).toString();
+    if (!active.isEmpty()) {
+        if (auto* editor = m_editors->editorForPath(active))
+            m_editors->setCurrentWidget(editor);
+    }
+    logInfo(QString::fromLatin1(kLogCategory), QStringLiteral("Session restored"));
+}
+
+void MainWindow::saveSession()
+{
+    QJsonArray files;
+    QString active;
+    for (int i = 0; i < m_editors->count(); ++i) {
+        if (FileEditor* editor = m_editors->editorAt(i)) {
+            files.append(editor->path());
+            if (editor == m_editors->currentEditor())
+                active = editor->path();
+        }
+    }
+    QJsonObject session;
+    session.insert(QStringLiteral("project"), m_projectPath);
+    session.insert(QStringLiteral("files"), files);
+    session.insert(QStringLiteral("active"), active);
+    m_database.saveSession(QStringLiteral("main"), session);
+    m_settings.lastProject = m_projectPath;
+    Settings::instance().setValues(m_settings);
+}
+
+void MainWindow::closeEvent(QCloseEvent* event)
+{
+    for (int i = 0; i < m_editors->count(); ++i) {
+        FileEditor* editor = m_editors->editorAt(i);
+        if (editor != nullptr && !maybeSaveEditor(editor)) {
+            event->ignore();
+            return;
+        }
+    }
+    saveSession();
+    logInfo(QString::fromLatin1(kLogCategory), QStringLiteral("Shutting down"));
+    m_memoryTimer->stop();
+    event->accept();
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (event->mimeData()->hasUrls())
+        event->acceptProposedAction();
+}
+
+void MainWindow::dropEvent(QDropEvent* event)
+{
+    const QList<QUrl> urls = event->mimeData()->urls();
+    if (urls.isEmpty())
+        return;
+    const QString path = urls.first().toLocalFile();
+    if (path.isEmpty())
+        return;
+    if (QFileInfo(path).isDir())
+        openProject(path);
+    else
+        openFile(path);
+    event->acceptProposedAction();
+}
+
+}  // namespace pkg::ui

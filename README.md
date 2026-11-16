@@ -1,0 +1,152 @@
+# PKG Studio
+
+A lightweight, native desktop IDE for package analysis, metadata inspection and authorized
+binary development. Built with C++20, Qt 6 Widgets and CMake — no Electron, no bundled web
+runtime.
+
+![PKG Studio with the dark theme](docs/screenshots/theme-dark.png)
+
+**Version 0.2.0.** This repository contains a real, running application: the VS Code-style
+shell, the SQLite data layer, the format analysis core, and a hex workspace with opt-in byte
+editing, undo/redo and backup-on-save. Disassembly, debugging, modding workflows and the plugin
+SDK are *not* present yet; see [docs/ROADMAP.md](docs/ROADMAP.md) for the honest status of every
+phase.
+
+## What works today
+
+**Shell and workspace**
+- Activity bar with Explorer, project Search, Recent and Help sections, plus a resizable
+  explorer tree backed by `QFileSystemModel`.
+- Editor area with multiple tabs, per-file header strip (`read-only`, format, summary).
+- Bottom output panel with a live log and a diagnostics tab; resizable splitter layout.
+- Welcome page with open-file / open-project / new-project / recent actions.
+- Status bar: mode, file, format, cursor offset, selection length, busy indicator, resident
+  memory and current theme.
+- Command palette (`Ctrl+Shift+P`) generated from the real command registry.
+- Drag and drop of files and folders, session restore, recent files/projects.
+
+**Analysis core**
+- Signature-based parser registry with a raw-bytes fallback and honest warnings for
+  unrecognized input.
+- ELF (32/64-bit, both byte orders): header, machine, entry point, program headers, `PT_INTERP`.
+- PE/COFF: DOS header, COFF header, PE32/PE32+ optional header, section table.
+- ZIP / Android APK: end-of-central-directory + central directory listing; APK detection and
+  manifest presence. Binary `AndroidManifest.xml` is *not* decoded.
+- PSP / PS Vita PKG: documented big-endian header fields (content ID, item counts, sizes).
+- PS4 PKG: 0x1000-byte container header fields, entry-table bounds checks, explicit warnings
+  that payloads are encrypted and are not extracted.
+- Unrecognized files are displayed as raw bytes with an explicit notice, never guessed.
+
+**Hex workspace**
+- Custom-painted hex + ASCII view over a memory-mapped file; only a ~256 KiB window is read
+  per repaint, so multi-gigabyte files are usable.
+- Cursor and selection, offset navigation (`Ctrl+G`), copy as hex/ASCII, select all.
+- Streaming search across the whole mapping (`Ctrl+F`) with case-insensitive ASCII mode, run
+  on a worker thread with cancellation; results are navigable.
+- **Opt-in byte editing**: click *Editing off* in the file header to start. Type two hex digits
+  in the hex column or a printable character in the ASCII column; modified bytes are shown in
+  the accent colour.
+- **Undo/redo** per file (`Ctrl+Z`, `Ctrl+Shift+Z`), with the redo branch dropped when you edit
+  after undoing. Edits stay in memory until saved and never touch the file implicitly.
+- **Safe saving**: `Ctrl+S` / `Ctrl+Shift+S` (Save as). Overwriting an existing file asks for
+  confirmation (unless disabled in Settings) and always writes a timestamped backup
+  (`name.pkgstudio-backup-YYYYMMDD-HHMMSS.bak`) before an atomic replacement. Failed saves
+  leave the original untouched and keep your edits.
+- Same-size editing only: bytes can be replaced, not inserted or deleted, and there is no
+  multi-range paste or clip extraction yet.
+
+![Byte editing enabled in the hex workspace](docs/screenshots/editing-dark.png)
+
+**Configuration and theming**
+- SQLite-backed settings: theme, editor font family/size, hex bytes per row and grouping,
+  lightweight mode, worker-thread cap, cache limit, log level, file logging, session restore,
+  recent-list limit.
+- Four built-in themes (Dark, Light, Darcula-inspired, Cyberpunk) rendered from a role-based
+  colour table into QSS.
+- Theme editor with live colour editing, user themes stored as JSON, theme import/export.
+- Customizable keyboard shortcuts (Settings → Shortcuts), including reset to defaults.
+- Lightweight mode disables optional UI animation/fade effects.
+
+**Data and stability**
+- SQLite schema v1: settings, recent entries, session state, analysis cache keyed by path,
+  size and mtime.
+- `Result<T>`/`Status` error model for expected failures; parser exceptions are contained by
+  the registry and surfaced as errors.
+- Overflow-safe offset arithmetic, file-size validation before reads, bounded table parsing,
+  clamped settings values, atomic file writes and rotating redacted logs.
+
+## Not implemented (do not expect them yet)
+
+Disassembler / Capstone integration, LLDB debugging, the modding studio workflows (asset
+inspection, diffs, validation, reversible modification history), plugin SDK and sample plugin,
+AI assistant, license manager, installer/uninstaller, PS5 PKG support, content extraction, and
+any DRM or console-security bypass. Hex editing cannot change file length. The Developer
+Console workspace currently exists only as the Output/Diagnostics panel — there is no
+interactive integrated terminal. Panels are resizable split views, not freely dockable windows.
+
+## Build
+
+Prerequisites: CMake ≥ 3.21, a C++20 compiler, Qt 6.5+ (Core, Gui, Widgets, Concurrent, Sql),
+Ninja or Make. On Debian/Ubuntu: `qt6-base-dev`, `libqt6sql6-sqlite`, `cmake`, `ninja-build`.
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+./build/src/PKGStudio
+```
+
+The test suite uses GoogleTest (fetched automatically when not installed):
+
+```bash
+cmake -S . -B build -G Ninja -DPKGSTUDIO_BUILD_TESTS=ON
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+```
+
+This workspace has no system Qt, so the repository also ships a self-contained toolchain
+setup (`scripts/setup-toolchain.sh`, `scripts/build.sh`). See [BUILD.md](BUILD.md) for the
+details, Windows instructions and all CMake options.
+
+## Running
+
+```bash
+./build/src/PKGStudio                       # normal session
+./build/src/PKGStudio -p samples -f samples/sample_ps4.pkg
+./build/src/PKGStudio --theme pkgstudio.cyberpunk
+./build/src/PKGStudio --selftest -f samples/sample.elf   # headless startup check
+```
+
+Generate the synthetic test corpus with `python3 tools/make_test_packages.py`. The samples are
+self-created fixtures, not commercial packages.
+
+Diagnostic CLI options: `--screenshot <path>` (render the window and exit) and
+`--screenshot-tab hex|analysis`. These exist so the same startup path can be verified headlessly
+and are also what produced the images in `docs/screenshots/`.
+
+## Data locations
+
+| Platform | Location |
+| --- | --- |
+| Linux | `~/.local/share/PKGStudio` (respects `XDG_DATA_HOME`) |
+| Windows | `%APPDATA%\PKGStudio` |
+
+Set `PKGSTUDIO_DATA_DIR` to override; the tests use this to stay isolated. The directory holds
+`pkgstudio.db`, `logs/pkgstudio.log`, `themes/*.json` and `crashes/`.
+
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — layers, data flow, threading, error model.
+- [BUILD.md](BUILD.md) — toolchain, options, Windows/Linux builds, packaging status.
+- [TESTING.md](TESTING.md) — what is tested, measured results and known gaps.
+- [SECURITY.md](SECURITY.md) — scope, data handling, reporting a vulnerability.
+- [docs/FORMATS.md](docs/FORMATS.md) — supported formats and the exact tested scope.
+- [docs/ROADMAP.md](docs/ROADMAP.md) — phase-by-phase implementation status.
+- [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md) — planned plugin design (not implemented).
+- [CHANGELOG.md](CHANGELOG.md) — release history.
+
+## Legal scope
+
+PKG Studio is for files you own or are authorized to inspect: homebrew, your own builds,
+public test files and developer-authorized assets. It does not decrypt protected commercial
+packages, bypass console security or DRM, or extract copyrighted content. It contains no
+telemetry and never uploads files.
