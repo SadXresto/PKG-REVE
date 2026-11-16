@@ -11,7 +11,32 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 using namespace pkg;
+
+namespace {
+
+double relativeLuminance(const QColor& color)
+{
+    const auto channel = [](double value) {
+        value /= 255.0;
+        return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(color.red()) + 0.7152 * channel(color.green()) +
+           0.0722 * channel(color.blue());
+}
+
+double contrastRatio(const QColor& a, const QColor& b)
+{
+    const double first = relativeLuminance(a);
+    const double second = relativeLuminance(b);
+    const double lighter = std::max(first, second);
+    const double darker = std::min(first, second);
+    return (lighter + 0.05) / (darker + 0.05);
+}
+
+}  // namespace
 
 class DatabaseTest : public ::testing::Test {
 protected:
@@ -112,6 +137,7 @@ TEST_F(DatabaseTest, SettingsSingletonClampsValues)
     Settings::instance().attach(&database);
     AppSettings values = Settings::instance().values();
     EXPECT_EQ(values.fontSize, 10);
+    EXPECT_EQ(values.themeId, QStringLiteral("pkgstudio.voidblack"));
 
     values.fontSize = 99;
     values.hexBytesPerRow = 4096;
@@ -195,6 +221,33 @@ TEST(ThemeTest, BuiltinThemesAreComplete)
     }
     EXPECT_TRUE(ids.contains(QStringLiteral("pkgstudio.dark")));
     EXPECT_TRUE(ids.contains(QStringLiteral("pkgstudio.cyberpunk")));
+    EXPECT_TRUE(ids.contains(QStringLiteral("pkgstudio.voidblack")));
+    EXPECT_TRUE(ids.contains(QStringLiteral("pkgstudio.neonhex")));
+}
+
+TEST(ThemeTest, VoidBlackIsTheDefaultPalette)
+{
+    const QList<Theme> themes = Theme::builtins();
+    const auto it = std::find_if(themes.begin(), themes.end(), [](const Theme& theme) {
+        return theme.id == QLatin1String("pkgstudio.voidblack");
+    });
+    ASSERT_NE(it, themes.end());
+
+    EXPECT_EQ(it->color(QStringLiteral("window")), QColor(QStringLiteral("#0a0a0a")));
+    EXPECT_EQ(it->color(QStringLiteral("panel")), QColor(QStringLiteral("#101010")));
+    EXPECT_EQ(it->color(QStringLiteral("accent")), QColor(QStringLiteral("#00ff41")));
+
+    EXPECT_GE(contrastRatio(it->color(QStringLiteral("windowText")),
+                            it->color(QStringLiteral("window"))),
+              7.0);
+    EXPECT_GE(contrastRatio(it->color(QStringLiteral("panelText")),
+                            it->color(QStringLiteral("panel"))),
+              4.5);
+    EXPECT_GE(contrastRatio(it->color(QStringLiteral("hexBytes")),
+                            it->color(QStringLiteral("base"))),
+              7.0);
+
+    EXPECT_EQ(ThemeManager::instance().fallback().id, QStringLiteral("pkgstudio.voidblack"));
 }
 
 TEST(ThemeTest, JsonRoundTripAndValidation)

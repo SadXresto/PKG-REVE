@@ -12,7 +12,7 @@ namespace pkg {
 class Database;
 
 struct AppSettings {
-    QString themeId = QStringLiteral("pkgstudio.dark");
+    QString themeId = QStringLiteral("pkgstudio.voidblack");
     QString fontFamily;
     int fontSize = 10;
     bool lightweight = false;

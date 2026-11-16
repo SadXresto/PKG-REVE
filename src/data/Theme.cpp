@@ -300,6 +300,86 @@ QList<Theme> Theme::builtins()
     });
     themes << cyberpunk;
 
+    Theme voidBlack;
+    voidBlack.id = QStringLiteral("pkgstudio.voidblack");
+    voidBlack.name = QStringLiteral("Void Black");
+    voidBlack.author = QStringLiteral("PKG Studio");
+    voidBlack.dark = true;
+    voidBlack.colors = makeColors({
+        {"window", "#0a0a0a"},
+        {"windowText", "#e8e8e8"},
+        {"base", "#0a0a0a"},
+        {"baseText", "#e8e8e8"},
+        {"alternateBase", "#101010"},
+        {"button", "#151515"},
+        {"buttonText", "#e8e8e8"},
+        {"highlight", "#123b24"},
+        {"highlightedText", "#f2fff5"},
+        {"tooltipBase", "#101010"},
+        {"tooltipText", "#e8e8e8"},
+        {"link", "#00ff41"},
+        {"border", "#1c3b28"},
+        {"panel", "#101010"},
+        {"panelText", "#c9d1c9"},
+        {"accent", "#00ff41"},
+        {"statusBar", "#101010"},
+        {"statusBarText", "#00ff41"},
+        {"tabActive", "#101010"},
+        {"tabInactive", "#0a0a0a"},
+        {"gutter", "#151515"},
+        {"hexOffset", "#4ad66d"},
+        {"hexBytes", "#e8e8e8"},
+        {"hexAscii", "#ff5c7a"},
+        {"hexSelection", "#123b24"},
+        {"hexSearch", "#4a1420"},
+        {"activityBar", "#0a0a0a"},
+        {"activityBarText", "#9fb3a4"},
+        {"inputBackground", "#151515"},
+        {"inputText", "#e8e8e8"},
+        {"sidebarHeader", "#101010"},
+    });
+    themes << voidBlack;
+
+    Theme neonHex;
+    neonHex.id = QStringLiteral("pkgstudio.neonhex");
+    neonHex.name = QStringLiteral("Neon Hex");
+    neonHex.author = QStringLiteral("PKG Studio");
+    neonHex.dark = true;
+    neonHex.colors = makeColors({
+        {"window", "#05060b"},
+        {"windowText", "#e6f1ff"},
+        {"base", "#05060b"},
+        {"baseText", "#e6f1ff"},
+        {"alternateBase", "#0b1120"},
+        {"button", "#111a2e"},
+        {"buttonText", "#e6f1ff"},
+        {"highlight", "#12305a"},
+        {"highlightedText", "#ffffff"},
+        {"tooltipBase", "#0b1120"},
+        {"tooltipText", "#e6f1ff"},
+        {"link", "#00e5ff"},
+        {"border", "#163a5a"},
+        {"panel", "#0b1120"},
+        {"panelText", "#b8cfe6"},
+        {"accent", "#00e5ff"},
+        {"statusBar", "#0b1120"},
+        {"statusBarText", "#00e5ff"},
+        {"tabActive", "#0b1120"},
+        {"tabInactive", "#05060b"},
+        {"gutter", "#0b1120"},
+        {"hexOffset", "#7aa2ff"},
+        {"hexBytes", "#e6f1ff"},
+        {"hexAscii", "#ffb000"},
+        {"hexSelection", "#12305a"},
+        {"hexSearch", "#4a2a00"},
+        {"activityBar", "#05060b"},
+        {"activityBarText", "#8fb3c9"},
+        {"inputBackground", "#111a2e"},
+        {"inputText", "#e6f1ff"},
+        {"sidebarHeader", "#0b1120"},
+    });
+    themes << neonHex;
+
     return themes;
 }
 

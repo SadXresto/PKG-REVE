@@ -71,6 +71,24 @@ QString keySequenceText(const QKeySequence& sequence)
     return sequence.toString(QKeySequence::PortableText);
 }
 
+/// Preferred programming fonts, in order. Falls back to the system fixed font
+/// when none of them is installed; the choice is never bundled or downloaded.
+QString preferredMonospaceFamily()
+{
+    static const QStringList preferred = {
+        QStringLiteral("JetBrains Mono"), QStringLiteral("Fira Code"),
+        QStringLiteral("Cascadia Code"),   QStringLiteral("Cascadia Mono"),
+        QStringLiteral("Source Code Pro"), QStringLiteral("Consolas"),
+        QStringLiteral("Liberation Mono"), QStringLiteral("DejaVu Sans Mono"),
+    };
+    const QStringList families = QFontDatabase::families();
+    for (const QString& family : preferred) {
+        if (families.contains(family))
+            return family;
+    }
+    return {};
+}
+
 }  // namespace
 
 MainWindow::MainWindow(Database& database, QWidget* parent)
@@ -630,8 +648,15 @@ void MainWindow::switchSidebar(const QString& id)
 QFont MainWindow::editorFont() const
 {
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    if (!m_settings.fontFamily.isEmpty())
+    if (!m_settings.fontFamily.isEmpty()) {
         font.setFamily(m_settings.fontFamily);
+    } else {
+        const QString preferred = preferredMonospaceFamily();
+        if (!preferred.isEmpty())
+            font.setFamily(preferred);
+    }
+    font.setStyleHint(QFont::Monospace);
+    font.setFixedPitch(true);
     font.setPointSize(m_settings.fontSize);
     return font;
 }

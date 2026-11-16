@@ -124,6 +124,30 @@ QListWidget#commandList { background-color: @base; border: 1px solid @border; }
 QLabel#sectionLabel { color: @panelText; font-weight: 600; }
 QLabel#hintLabel { color: @panelText; }
 QLabel#hintLabel:disabled { color: @gutter; }
+
+/* Design-system components: inspector, badges, replace bar. */
+QFrame#byteInspector {
+    background-color: @panel; border: 1px solid @border;
+}
+QLabel#inspectorTitle {
+    color: @accent; font-weight: 600; letter-spacing: 0.6px;
+}
+QLabel#inspectorKey { color: @gutter; }
+QLabel#inspectorValue { color: @panelText; }
+QToolButton#inspectorClose {
+    background: transparent; color: @panelText; border: none; padding: 2px 4px;
+}
+QToolButton#inspectorClose:hover { color: @accent; }
+QToolButton#editToggle {
+    background: transparent; color: @accent; border: 1px solid @border;
+    padding: 2px 8px; border-radius: 2px;
+}
+QToolButton#editToggle:hover { border-color: @accent; }
+QLabel#signatureBadge {
+    color: @accent; border: 1px solid @border; padding: 1px 6px;
+}
+QWidget#replaceBar { background-color: @panel; border-top: 1px solid @border; }
+QKeySequenceEdit { padding: 1px 3px; }
 )");
 }
 
@@ -139,7 +163,7 @@ ThemeManager::ThemeManager()
 {
     for (Theme theme : Theme::builtins())
         m_themes.insert(theme.id, theme);
-    m_currentId = QStringLiteral("pkgstudio.dark");
+    m_currentId = QStringLiteral("pkgstudio.voidblack");
 }
 
 ThemeManager::~ThemeManager() = default;
@@ -213,12 +237,12 @@ const Theme& ThemeManager::current() const
     const auto it = m_themes.constFind(m_currentId);
     if (it != m_themes.constEnd())
         return it.value();
-    return m_themes.constFind(QStringLiteral("pkgstudio.dark")).value();
+    return m_themes.constFind(QStringLiteral("pkgstudio.voidblack")).value();
 }
 
 const Theme& ThemeManager::fallback() const
 {
-    return m_themes.constFind(QStringLiteral("pkgstudio.dark")).value();
+    return m_themes.constFind(QStringLiteral("pkgstudio.voidblack")).value();
 }
 
 Status ThemeManager::setCurrent(const QString& id)
