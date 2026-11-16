@@ -1,5 +1,8 @@
 #include "core/ByteSearch.h"
 
+#include "core/HexDocument.h"
+#include "core/SafeMath.h"
+
 #include "core/SafeMath.h"
 
 #include <algorithm>
@@ -77,6 +80,37 @@ Result<SearchResult> searchBytes(const FileSource& source,
     }
 
     return result;
+}
+
+Result<int> replaceAllEqualLength(HexDocument& document, const QVector<quint64>& offsets,
+                                  const QByteArray& pattern, const QByteArray& replacement)
+{
+    if (!document.isValid())
+        return makeError(QStringLiteral("No document is open"));
+    if (pattern.isEmpty())
+        return makeError(QStringLiteral("The search pattern is empty"));
+    if (replacement.size() != pattern.size()) {
+        return makeError(
+            QStringLiteral("Replacement must be the same length as the pattern"),
+            QStringLiteral("pattern %1 byte(s), replacement %2 byte(s); insert/delete is not "
+                           "implemented")
+                .arg(pattern.size())
+                .arg(replacement.size()));
+    }
+
+    int replaced = 0;
+    for (const quint64 offset : offsets) {
+        if (!safe::inRange(offset, static_cast<quint64>(pattern.size()), document.size())) {
+            return makeError(QStringLiteral("Match offset is outside the file"),
+                             QStringLiteral("offset %1").arg(offset));
+        }
+        for (qsizetype i = 0; i < replacement.size(); ++i) {
+            document.setByte(offset + static_cast<quint64>(i),
+                             static_cast<quint8>(replacement.at(i)));
+        }
+        ++replaced;
+    }
+    return replaced;
 }
 
 }  // namespace pkg

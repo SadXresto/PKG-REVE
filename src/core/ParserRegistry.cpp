@@ -1,6 +1,8 @@
 #include "core/IFormatParser.h"
 
+#include "core/FormatUtil.h"
 #include "core/Logging.h"
+#include "core/SignatureScanner.h"
 #include "core/parsers/ElfParser.h"
 #include "core/parsers/PeParser.h"
 #include "core/parsers/PkgParsers.h"
@@ -76,6 +78,24 @@ Result<PackageInfo> ParserRegistry::analyze(const FileSource& source,
                                  ? info.error().message
                                  : QStringLiteral("%1 (%2)")
                                        .arg(info.error().message, info.error().detail));
+        }
+
+        info.value().signatures = SignatureScanner::scan(source);
+        if (!info.value().signatures.isEmpty()) {
+            InfoSection section;
+            section.title = QStringLiteral("Detected signatures");
+            for (const SignatureHit& hit : info.value().signatures) {
+                InfoField field;
+                field.name = hit.name;
+                field.value = QStringLiteral("offset %1, %2 byte(s)")
+                                  .arg(fmt::hexPrefixed(hit.offset, 8))
+                                  .arg(hit.length);
+                field.note = QStringLiteral("confidence %1% \u2014 %2")
+                                 .arg(hit.confidence)
+                                 .arg(hit.note);
+                section.fields << field;
+            }
+            info.value().sections << section;
         }
         return info;
     } catch (const std::exception& error) {

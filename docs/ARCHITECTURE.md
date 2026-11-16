@@ -75,6 +75,22 @@ Rules every parser follows:
   returns an error, and the registry then falls back to raw-byte output.
 - Parsers never decrypt, extract or modify content.
 
+## Signature detection, inspector and replace
+
+- `SignatureScanner` reads at most the first 4 MiB (plus a 64 KiB tail for the ZIP end record)
+  and checks a fixed documented list. Each `SignatureHit` carries offset, length, category,
+  confidence and a note describing the validation performed (`99` = structural validation,
+  lower = magic-only or embedded match). Results are attached to `PackageInfo`, serialized into
+  the analysis cache and rendered both as an analysis section and as hex-view underlines.
+  The scanner never claims a format from an ambiguous or partial match.
+- `ByteInspector` is a themed overlay owned by `FileEditor`, parented to the hex view. Hover,
+  cursor and selection signals feed it; formatting lives in a static pure function so tests do
+  not need a widget. It reads at most eight merged bytes through `HexDocument`.
+- Replace runs only on offsets produced by a completed search and rejects a replacement whose
+  length differs from the pattern, because the document model is still same-size. Applied bytes
+  go through `HexDocument::setByte`, so they are journalled and undoable; the confirmation dialog
+  states that the file on disk is untouched until Save.
+
 ## Error model
 
 `Result<T>` holds either a value or a `Status` (`message` + optional `detail`). Expected

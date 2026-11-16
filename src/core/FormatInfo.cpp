@@ -91,6 +91,11 @@ QJsonObject PackageInfo::toJson() const
         sectionArray.append(sectionObject);
     }
     object.insert(QStringLiteral("sections"), sectionArray);
+
+    QJsonArray signatureArray;
+    for (const SignatureHit& hit : signatures)
+        signatureArray.append(hit.toJson());
+    object.insert(QStringLiteral("signatures"), signatureArray);
     return object;
 }
 
@@ -130,6 +135,9 @@ Result<PackageInfo> PackageInfo::fromJson(const QJsonObject& object)
         }
         info.sections.append(section);
     }
+
+    for (const QJsonValue& signatureValue : object.value(QStringLiteral("signatures")).toArray())
+        info.signatures.append(SignatureHit::fromJson(signatureValue.toObject()));
     return info;
 }
 

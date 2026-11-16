@@ -7,6 +7,7 @@
 
 #include <QByteArray>
 #include <QFutureWatcher>
+#include <QVector>
 #include <QString>
 #include <QWidget>
 
@@ -20,6 +21,7 @@ class QToolButton;
 
 namespace pkg::ui {
 
+class ByteInspector;
 class PackageInfoView;
 
 /// One open file: header strip, hex view, analysis page and an inline find bar
@@ -38,6 +40,8 @@ public:
     void setAnalysis(const pkg::PackageInfo& info);
     void setAnalysisError(const QString& message);
     void showAnalysisTab();
+    /// Diagnostic/screenshot helper: reveals the live inspector at `offset`.
+    void showByteInspectorAt(quint64 offset);
     [[nodiscard]] QString analysisReport() const;
     [[nodiscard]] const pkg::PackageInfo& analysisInfo() const { return m_info; }
     [[nodiscard]] bool hasAnalysis() const { return m_hasAnalysis; }
@@ -74,6 +78,8 @@ private:
     void onSearchFinished();
     void refreshEditState();
     void updateTitleLabel();
+    void positionInspector();
+    void replaceAll();
 
     std::shared_ptr<HexDocument> m_document;
     QLabel* m_titleLabel = nullptr;
@@ -82,10 +88,14 @@ private:
     QToolButton* m_editToggle = nullptr;
     QTabWidget* m_tabs = nullptr;
     HexView* m_hex = nullptr;
+    ByteInspector* m_inspector = nullptr;
     PackageInfoView* m_infoView = nullptr;
 
     QWidget* m_findBar = nullptr;
     QLineEdit* m_findInput = nullptr;
+    QLineEdit* m_replaceInput = nullptr;
+    QLabel* m_replaceStatus = nullptr;
+    QToolButton* m_replaceAllButton = nullptr;
     QCheckBox* m_caseBox = nullptr;
     QLabel* m_findStatus = nullptr;
     QToolButton* m_previousButton = nullptr;
@@ -97,6 +107,7 @@ private:
     std::shared_ptr<QFutureWatcher<Result<SearchResult>>> m_watcher;
     CancelToken m_token;
     QByteArray m_pattern;
+    QVector<quint64> m_hits;
     bool m_searchRunning = false;
 };
 

@@ -10,6 +10,8 @@
 
 namespace pkg {
 
+class HexDocument;
+
 struct SearchOptions {
     quint64 startOffset = 0;
     quint64 maxHits = 5000;
@@ -29,5 +31,14 @@ struct SearchResult {
                                               const QByteArray& needle,
                                               const SearchOptions& options,
                                               const CancelToken& token);
+
+/// Applies an equal-length replacement at pre-computed match offsets. Changing
+/// the file length is intentionally unsupported until insert/delete lands, so
+/// a size mismatch is an error rather than a silent truncation. Every changed
+/// byte is journaled, so undo works byte by byte.
+[[nodiscard]] Result<int> replaceAllEqualLength(HexDocument& document,
+                                                const QVector<quint64>& offsets,
+                                                const QByteArray& pattern,
+                                                const QByteArray& replacement);
 
 }  // namespace pkg

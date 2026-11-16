@@ -2,11 +2,13 @@
 #pragma once
 
 #include "core/Result.h"
+#include "core/Signature.h"
 
 #include <QJsonObject>
 #include <QList>
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 namespace pkg {
 
@@ -42,6 +44,8 @@ struct PackageInfo {
     QString summary;
     QList<InfoSection> sections;
     QStringList warnings;
+    /// Documented signatures found by the bounded scanner (including embedded ones).
+    QVector<SignatureHit> signatures;
 
     /// True when only part of the structure could be described (size caps,
     /// truncated input, unsupported revisions).

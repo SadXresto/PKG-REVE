@@ -132,8 +132,8 @@ QFrame#byteInspector {
 QLabel#inspectorTitle {
     color: @accent; font-weight: 600; letter-spacing: 0.6px;
 }
-QLabel#inspectorKey { color: @gutter; }
-QLabel#inspectorValue { color: @panelText; }
+QLabel#inspectorKey { color: @panelText; }
+QLabel#inspectorValue { color: @baseText; }
 QToolButton#inspectorClose {
     background: transparent; color: @panelText; border: none; padding: 2px 4px;
 }

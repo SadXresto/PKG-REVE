@@ -30,6 +30,14 @@ reported as unrecognized bytes.
 - No commercial console package has been tested against this build, so the UI and these docs
   deliberately avoid claiming "compatible with all retail PKGs".
 
+## Signature detection (annotations, not parsers)
+
+The bounded scanner recognises: ELF, PE/DOS (PE header verified when possible), ZIP, PNG,
+JPEG, PDF, GZIP, 7-Zip, RAR/RAR5, SQLite, WebAssembly, GIF, Mach-O, Java class / universal
+binary (ambiguous magic), PSP/Vita PKG and PS4 PKG. Confidence and a validation note are shown
+for every hit; embedded matches are reported at reduced confidence and are not treated as the
+container format. A signature alone never upgrades the file to a parsed format.
+
 ## Saving edited files
 
 Saving rewrites the whole file with pending byte edits applied, at the same size. It never

@@ -4,6 +4,33 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.3.0] — 2026-11-16
+
+### Added
+
+- **Void Black** design system and default theme (`#0a0a0a` surfaces, `#00ff41` accent, green
+  borders), Neon Hex theme, component QSS rules, design-token documentation and contrast tests.
+- Preferred monospace font resolution (JetBrains Mono, Fira Code, Cascadia, Source Code Pro,
+  Consolas, Liberation/DejaVu Mono) with the system fixed font as fallback.
+- Live byte inspector overlay: offset, hex, decimal, binary, ASCII, signed/unsigned 8/16/32/64-bit
+  values in both endiannesses, and 32/64-bit floats; updates on hover, cursor move and selection.
+- Bounded signature scanner with per-hit confidence and validation notes; results appear in the
+  analysis page ("Detected signatures") and are overlaid on the hex bytes. Survives the analysis
+  cache via JSON and rejects unvalidated guesses.
+- Same-length Replace All after a search, with confirmation, hex/text replacement, undo per byte
+  and a clear error when the replacement length differs.
+- Diagnostic `--screenshot-tab inspector`, verified Void Black and inspector screenshots.
+
+### Changed
+
+- Version 0.3.0. New installations default to Void Black; existing saved theme choices are kept.
+- Inspector and badge component styling moved into the shared theme sheet rather than local styles.
+
+### Known limitations
+
+- Insert/delete, multi-range selection, bookmarks, binary comparison, disassembly, AI, plugins
+  and installers remain future phases.
+
 ## [0.2.0] — 2026-11-16
 
 ### Added

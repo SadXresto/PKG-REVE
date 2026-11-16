@@ -158,6 +158,8 @@ int Application::run(const StartupOptions& options)
     if (!options.screenshotPath.isEmpty()) {
         if (options.screenshotTab == QLatin1String("analysis"))
             m_window->showAnalysisTabForCurrentEditor();
+        else if (options.screenshotTab == QLatin1String("inspector"))
+            m_window->showByteInspectorForCurrentEditor();
         else if (!options.screenshotTab.isEmpty() && options.screenshotTab != QLatin1String("hex"))
             logWarning(QString::fromLatin1(kLogCategory),
                        QStringLiteral("Unknown --screenshot-tab '%1'")

@@ -50,6 +50,7 @@ HexView::HexView(QWidget* parent)
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     viewport()->setCursor(Qt::IBeamCursor);
     viewport()->setAttribute(Qt::WA_OpaquePaintEvent, true);
+    viewport()->setMouseTracking(true);
 
     const QFont fixed = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     m_font = fixed;
@@ -84,6 +85,7 @@ void HexView::setDocument(std::shared_ptr<HexDocument> document)
     m_window.clear();
     m_searchHits.clear();
     m_currentHit = -1;
+    m_signatures.clear();
     m_pendingHighNibble = -1;
     m_cursorInAscii = false;
     recomputeMetrics();
@@ -296,6 +298,10 @@ void HexView::paintEvent(QPaintEvent*)
     const QColor selectionColor = theme.color(QStringLiteral("hexSelection"));
     const QColor searchColor = theme.color(QStringLiteral("hexSearch"));
     const QColor accentColor = theme.color(QStringLiteral("accent"));
+    QColor signatureTint = accentColor;
+    signatureTint.setAlpha(28);
+    QColor signatureLine = accentColor;
+    signatureLine.setAlpha(150);
 
     painter.setFont(m_font);
 
@@ -351,6 +357,20 @@ void HexView::paintEvent(QPaintEvent*)
                 displayed = static_cast<quint64>((m_pendingHighNibble << 4) | (value & 0x0F));
             const bool modified = m_document->hasOverride(offset);
 
+            bool signedRange = false;
+            for (const SignatureHit& hit : m_signatures) {
+                const quint64 end = hit.offset + hit.length;
+                if (offset >= hit.offset && offset < end) {
+                    signedRange = true;
+                    break;
+                }
+            }
+            if (signedRange) {
+                painter.fillRect(QRect(x - 1, y, 2 * charWidth + 2, rowHeight), signatureTint);
+                painter.fillRect(QRect(x - 1, y + rowHeight - 2, 2 * charWidth + 2, 2),
+                                 signatureLine);
+            }
+
             painter.setPen((modified || pendingNibble) ? accentColor : byteColor);
             painter.drawText(QRect(x, y, 2 * charWidth, rowHeight),
                              Qt::AlignLeft | Qt::AlignVCenter,
@@ -389,6 +409,7 @@ void HexView::resizeEvent(QResizeEvent* event)
 {
     QAbstractScrollArea::resizeEvent(event);
     updateScrollBars();
+    emit viewResized();
 }
 
 void HexView::scrollContentsBy(int dx, int dy)
@@ -510,12 +531,23 @@ void HexView::mousePressEvent(QMouseEvent* event)
 void HexView::mouseMoveEvent(QMouseEvent* event)
 {
     if (!m_dragging) {
+        const auto offset = offsetAt(event->pos());
+        if (offset)
+            emit hovered(*offset);
+        else
+            emit hoverCleared();
         QAbstractScrollArea::mouseMoveEvent(event);
         return;
     }
     const auto offset = offsetAt(event->pos());
     if (offset && *offset != m_cursor)
         setCursor(*offset, true);
+}
+
+void HexView::leaveEvent(QEvent* event)
+{
+    emit hoverCleared();
+    QAbstractScrollArea::leaveEvent(event);
 }
 
 void HexView::mouseReleaseEvent(QMouseEvent* event)
@@ -790,6 +822,18 @@ void HexView::clearSearchHits()
 {
     m_searchHits.clear();
     m_currentHit = -1;
+    viewport()->update();
+}
+
+void HexView::setSignatures(const QVector<SignatureHit>& signatures)
+{
+    m_signatures = signatures;
+    viewport()->update();
+}
+
+void HexView::clearSignatures()
+{
+    m_signatures.clear();
     viewport()->update();
 }
 

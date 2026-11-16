@@ -12,6 +12,8 @@ add_library(pkgstudio_core STATIC
     core/Logging.cpp
     core/ParserRegistry.cpp
     core/ProcessInfo.cpp
+    core/Signature.cpp
+    core/SignatureScanner.cpp
     core/parsers/ElfParser.cpp
     core/parsers/ParserSupport.cpp
     core/parsers/PeParser.cpp
@@ -32,6 +34,7 @@ add_library(pkgstudio_app STATIC
     data/Theme.cpp
     data/ThemeManager.cpp
     ui/ActivityBar.cpp
+    ui/ByteInspector.cpp
     ui/CommandPalette.cpp
     ui/EditorArea.cpp
     ui/FileEditor.cpp

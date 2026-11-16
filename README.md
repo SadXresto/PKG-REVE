@@ -6,11 +6,12 @@ runtime.
 
 ![PKG Studio with the dark theme](docs/screenshots/theme-dark.png)
 
-**Version 0.2.0.** This repository contains a real, running application: the VS Code-style
-shell, the SQLite data layer, the format analysis core, and a hex workspace with opt-in byte
-editing, undo/redo and backup-on-save. Disassembly, debugging, modding workflows and the plugin
-SDK are *not* present yet; see [docs/ROADMAP.md](docs/ROADMAP.md) for the honest status of every
-phase.
+**Version 0.3.0.** This repository contains a real, running application: the VS Code-style
+shell with the Void Black design system, the SQLite data layer, the format analysis core with
+signature confidence, and a hex workspace with a live byte inspector, signature overlay,
+same-length replace, opt-in editing, undo/redo and backup-on-save. Disassembly, debugging,
+AI, plugins and the installer are *not* present yet; see [docs/ROADMAP.md](docs/ROADMAP.md) for
+the honest status of every phase.
 
 ## What works today
 
@@ -43,6 +44,14 @@ phase.
 - Cursor and selection, offset navigation (`Ctrl+G`), copy as hex/ASCII, select all.
 - Streaming search across the whole mapping (`Ctrl+F`) with case-insensitive ASCII mode, run
   on a worker thread with cancellation; results are navigable.
+- **Live byte inspector**: hovering or selecting a byte shows offset, hex, decimal, binary,
+  ASCII, signed/unsigned 8/16/32/64-bit values in both endiannesses, and 32/64-bit floats.
+- **Signature overlay**: documented signatures (ELF, PE, ZIP, PNG, JPEG, PDF, GZIP, 7z, RAR,
+  SQLite, Wasm, GIF, Mach-O, Vita/PS4 PKG, CAFEBABE) are scanned in a bounded 4 MiB prefix,
+  annotated under the bytes, and listed in the analysis page with offset, length, confidence
+  and the validation performed. Embedded matches are reported at lower confidence.
+- **Replace all** with equal-length replacements (hex or text) after a search, applied in
+  memory with confirmation and undo. Changing the file length is still unsupported.
 - **Opt-in byte editing**: click *Editing off* in the file header to start. Type two hex digits
   in the hex column or a printable character in the ASCII column; modified bytes are shown in
   the accent colour.
@@ -55,14 +64,17 @@ phase.
 - Same-size editing only: bytes can be replaced, not inserted or deleted, and there is no
   multi-range paste or clip extraction yet.
 
-![Byte editing enabled in the hex workspace](docs/screenshots/editing-dark.png)
+![Live byte inspector and signature overlay in Void Black](docs/screenshots/inspector-voidblack.png)
 
 **Configuration and theming**
 - SQLite-backed settings: theme, editor font family/size, hex bytes per row and grouping,
   lightweight mode, worker-thread cap, cache limit, log level, file logging, session restore,
   recent-list limit.
-- Four built-in themes (Dark, Light, Darcula-inspired, Cyberpunk) rendered from a role-based
-  colour table into QSS.
+- Six built-in themes with **Void Black** as the default: `#0a0a0a` surfaces, `#00ff41` accent,
+  subtle dark-green borders. Dark, Light, Darcula-inspired, Cyberpunk and Neon Hex are also
+  available. All UI surfaces are rendered from one role-based token system into a single QSS.
+- JetBrains Mono / Fira Code (or the next installed fixed-pitch font) is resolved automatically
+  for the hex and editor fonts; the size stays user-configurable.
 - Theme editor with live colour editing, user themes stored as JSON, theme import/export.
 - Customizable keyboard shortcuts (Settings → Shortcuts), including reset to defaults.
 - Lightweight mode disables optional UI animation/fade effects.
@@ -77,12 +89,12 @@ phase.
 
 ## Not implemented (do not expect them yet)
 
-Disassembler / Capstone integration, LLDB debugging, the modding studio workflows (asset
-inspection, diffs, validation, reversible modification history), plugin SDK and sample plugin,
-AI assistant, license manager, installer/uninstaller, PS5 PKG support, content extraction, and
-any DRM or console-security bypass. Hex editing cannot change file length. The Developer
-Console workspace currently exists only as the Output/Diagnostics panel — there is no
-interactive integrated terminal. Panels are resizable split views, not freely dockable windows.
+Disassembler / Capstone integration, LLDB debugging, AI Studio, plugin runtime, the modding
+studio workflows (diffs, patch history, validation), license manager, installer/uninstaller,
+PS5 PKG support, content extraction, and any DRM or console-security bypass. Hex editing cannot
+insert or delete bytes yet. The Developer Console workspace currently exists only as the
+Output/Diagnostics panel — there is no interactive integrated terminal. Panels are resizable
+split views, not freely dockable windows.
 
 ## Build
 
@@ -135,6 +147,8 @@ Set `PKGSTUDIO_DATA_DIR` to override; the tests use this to stay isolated. The d
 
 ## Documentation
 
+- [docs/AUDIT-2026-11-16.md](docs/AUDIT-2026-11-16.md) — repository audit and phased upgrade plan.
+- [docs/DESIGN.md](docs/DESIGN.md) — Void Black design tokens and component rules.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — layers, data flow, threading, error model.
 - [BUILD.md](BUILD.md) — toolchain, options, Windows/Linux builds, packaging status.
 - [TESTING.md](TESTING.md) — what is tested, measured results and known gaps.

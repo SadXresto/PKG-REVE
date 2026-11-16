@@ -47,6 +47,8 @@ public:
     /// Shows the analysis tab of the active editor. Used by the screenshot
     /// diagnostics mode so documentation captures the real analysis view.
     bool showAnalysisTabForCurrentEditor();
+    /// Diagnostic/screenshot helper for the live byte inspector.
+    bool showByteInspectorForCurrentEditor();
     void openProject(const QString& path);
     void showWelcome();
     void showSettings();

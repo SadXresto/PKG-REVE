@@ -17,7 +17,10 @@ add_executable(pkgstudio_tests
     test_file_source.cpp
     test_parsers.cpp
     test_pkg_parsers.cpp
+    test_signatures.cpp
+    test_inspector.cpp
     test_hex_search.cpp
+    test_replace.cpp
     test_editing.cpp
     test_ui_editing.cpp
     test_data.cpp

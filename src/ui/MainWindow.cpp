@@ -757,6 +757,15 @@ bool MainWindow::showAnalysisTabForCurrentEditor()
     return true;
 }
 
+bool MainWindow::showByteInspectorForCurrentEditor()
+{
+    FileEditor* editor = currentEditor();
+    if (editor == nullptr)
+        return false;
+    editor->showByteInspectorAt(editor->hexView()->cursorOffset());
+    return true;
+}
+
 void MainWindow::updateFileStatus(FileEditor* editor)
 {
     if (editor == nullptr) {

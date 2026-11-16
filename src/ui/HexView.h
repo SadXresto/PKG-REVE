@@ -6,6 +6,7 @@
 #pragma once
 
 #include "core/HexDocument.h"
+#include "core/Signature.h"
 
 #include <QAbstractScrollArea>
 #include <QByteArray>
@@ -55,6 +56,10 @@ public:
 
     void setSearchHits(const QVector<quint64>& offsets, int patternLength);
     void clearSearchHits();
+
+    /// Underlines and tints byte ranges that matched documented signatures.
+    void setSignatures(const QVector<SignatureHit>& signatures);
+    void clearSignatures();
     [[nodiscard]] bool findNextHit(bool forward);
     [[nodiscard]] int searchHitCount() const
     {
@@ -74,6 +79,9 @@ signals:
     void gotoRequested();
     void copyRequested();
     void documentEdited();
+    void hovered(quint64 offset);
+    void hoverCleared();
+    void viewResized();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -81,6 +89,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void leaveEvent(QEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     void changeEvent(QEvent* event) override;
@@ -132,6 +141,7 @@ private:
     QVector<quint64> m_searchHits;
     int m_patternLength = 1;
     int m_currentHit = -1;
+    QVector<SignatureHit> m_signatures;
 };
 
 }  // namespace pkg::ui

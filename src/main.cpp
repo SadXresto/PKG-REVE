@@ -74,7 +74,8 @@ int main(int argc, char* argv[])
         QStringLiteral("path"));
     const QCommandLineOption screenshotTabOption(
         QStringLiteral("screenshot-tab"),
-        QStringLiteral("Tab to show in the diagnostic screenshot: hex or analysis."),
+        QStringLiteral("View to show in the diagnostic screenshot: hex, analysis or "
+                       "inspector."),
         QStringLiteral("tab"));
     const QCommandLineOption selfTestOption(
         QStringLiteral("selftest"),

@@ -3,6 +3,7 @@
 #include "core/FormatUtil.h"
 #include "core/Logging.h"
 #include "core/SafeMath.h"
+#include "ui/ByteInspector.h"
 #include "ui/PackageInfoView.h"
 
 #include <QCheckBox>
@@ -12,12 +13,15 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QTabWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QtConcurrent>
+
+#include <algorithm>
 
 namespace pkg::ui {
 namespace {
@@ -31,6 +35,32 @@ QToolButton* makeBarButton(const QString& text, const QString& tooltip, QWidget*
     button->setAutoRaise(true);
     return button;
 }
+
+/// Accepts "AA BB CC" hex notation or plain UTF-8 text.
+QByteArray parsePattern(const QString& raw)
+{
+    if (raw.isEmpty())
+        return {};
+    QByteArray pattern;
+    static const QRegularExpression hexOnly(QStringLiteral("^[0-9A-Fa-f ]+$"));
+    const bool looksHex = raw.contains(QLatin1Char(' ')) && hexOnly.match(raw).hasMatch();
+    if (looksHex) {
+        const QStringList parts = raw.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        for (const QString& part : parts) {
+            bool ok = false;
+            const uint value = part.toUInt(&ok, 16);
+            if (!ok || value > 0xFFU) {
+                pattern.clear();
+                break;
+            }
+            pattern.append(static_cast<char>(value));
+        }
+    }
+    if (pattern.isEmpty())
+        pattern = raw.toUtf8();
+    return pattern;
+}
+
 }  // namespace
 
 FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
@@ -86,9 +116,13 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
     // Find bar -----------------------------------------------------------
     m_findBar = new QWidget(hexPage);
     m_findBar->setObjectName(QStringLiteral("fileEditorHeader"));
-    auto* findLayout = new QHBoxLayout(m_findBar);
-    findLayout->setContentsMargins(8, 4, 8, 4);
+    auto* findOuter = new QVBoxLayout(m_findBar);
+    findOuter->setContentsMargins(8, 4, 8, 4);
+    findOuter->setSpacing(4);
+    auto* findLayout = new QHBoxLayout();
+    findLayout->setContentsMargins(0, 0, 0, 0);
     findLayout->setSpacing(6);
+    findOuter->addLayout(findLayout);
 
     auto* findLabel = new QLabel(QStringLiteral("Find"), m_findBar);
     findLabel->setObjectName(QStringLiteral("hintLabel"));
@@ -117,6 +151,26 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
         makeBarButton(QStringLiteral("\u2715"), QStringLiteral("Close find bar"), m_findBar);
     findLayout->addWidget(closeFind);
 
+    auto* replaceLayout = new QHBoxLayout();
+    replaceLayout->setContentsMargins(0, 0, 0, 0);
+    replaceLayout->setSpacing(6);
+    auto* replaceLabel = new QLabel(QStringLiteral("Replace"), m_findBar);
+    replaceLabel->setObjectName(QStringLiteral("hintLabel"));
+    replaceLayout->addWidget(replaceLabel);
+    m_replaceInput = new QLineEdit(m_findBar);
+    m_replaceInput->setPlaceholderText(
+        QStringLiteral("Replacement with the same byte length (e.g. 90 90)"));
+    replaceLayout->addWidget(m_replaceInput, 1);
+    m_replaceAllButton = makeBarButton(QStringLiteral("Replace all"),
+                                       QStringLiteral("Replace every search hit in memory"),
+                                       m_findBar);
+    m_replaceAllButton->setObjectName(QStringLiteral("editToggle"));
+    replaceLayout->addWidget(m_replaceAllButton);
+    m_replaceStatus = new QLabel(m_findBar);
+    m_replaceStatus->setObjectName(QStringLiteral("hintLabel"));
+    replaceLayout->addWidget(m_replaceStatus);
+    findOuter->addLayout(replaceLayout);
+
     hexLayout->addWidget(m_findBar);
     m_findBar->setVisible(false);
 
@@ -132,6 +186,31 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
     m_formatLabel->setText(fmt::humanBytes(m_document->size()));
 
     m_hex->setDocument(m_document);
+
+    m_inspector = new ByteInspector(m_hex);
+    m_inspector->setDocument(m_document.get());
+    connect(m_hex, &HexView::viewResized, this, &FileEditor::positionInspector);
+    connect(m_hex, &HexView::hovered, this, [this](quint64 offset) {
+        m_inspector->showOffset(offset);
+        positionInspector();
+    });
+    connect(m_hex, &HexView::hoverCleared, this, [this]() {
+        if (m_hex->selectionLength() <= 1)
+            m_inspector->clear();
+    });
+    connect(m_inspector, &ByteInspector::closeRequested, m_inspector, &QWidget::hide);
+    connect(m_hex, &HexView::cursorMoved, this, [this](quint64 offset) {
+        if (m_hex->selectionLength() <= 1) {
+            m_inspector->showOffset(offset);
+            positionInspector();
+        }
+    });
+    connect(m_hex, &HexView::selectionChanged, this, [this](quint64 start, quint64 length) {
+        if (length > 1) {
+            m_inspector->showSelection(start, length);
+            positionInspector();
+        }
+    });
 
     connect(m_hex, &HexView::cursorMoved, this, &FileEditor::cursorMoved);
     connect(m_hex, &HexView::selectionChanged, this, &FileEditor::selectionChanged);
@@ -159,6 +238,8 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
             m_findStatus->setText(QStringLiteral("no matches"));
     });
     connect(closeFind, &QToolButton::clicked, this, [this]() { showFindBar(false); });
+    connect(m_replaceAllButton, &QToolButton::clicked, this, &FileEditor::replaceAll);
+    connect(m_replaceInput, &QLineEdit::returnPressed, this, &FileEditor::replaceAll);
 
     m_watcher = std::make_shared<QFutureWatcher<Result<SearchResult>>>();
     connect(m_watcher.get(), &QFutureWatcher<Result<SearchResult>>::finished, this,
@@ -174,6 +255,17 @@ void FileEditor::updateTitleLabel()
 {
     const QString name = QFileInfo(path()).fileName();
     m_titleLabel->setText(isModified() ? name + QStringLiteral(" \u25CF") : name);
+}
+
+void FileEditor::positionInspector()
+{
+    if (m_inspector == nullptr || !m_inspector->isVisible())
+        return;
+    m_inspector->adjustSize();
+    const int margin = 14;
+    m_inspector->move(std::max(0, m_hex->width() - m_inspector->width() - margin),
+                      std::max(0, m_hex->height() - m_inspector->height() - margin));
+    m_inspector->raise();
 }
 
 void FileEditor::refreshEditState()
@@ -264,6 +356,7 @@ void FileEditor::setAnalysis(const pkg::PackageInfo& info)
     m_summaryLabel->setText(info.summary);
     m_summaryLabel->setToolTip(info.summary);
     m_infoView->setInfo(info, path(), fileSize());
+    m_hex->setSignatures(info.signatures);
     m_tabs->setTabText(1, info.warnings.isEmpty()
                               ? QStringLiteral("Analysis")
                               : QStringLiteral("Analysis (%1)").arg(info.warnings.size()));
@@ -279,6 +372,15 @@ void FileEditor::setAnalysisError(const QString& message)
 void FileEditor::showAnalysisTab()
 {
     m_tabs->setCurrentIndex(1);
+}
+
+void FileEditor::showByteInspectorAt(quint64 offset)
+{
+    if (m_inspector == nullptr)
+        return;
+    m_tabs->setCurrentIndex(0);
+    m_inspector->showOffset(offset);
+    positionInspector();
 }
 
 QString FileEditor::analysisReport() const
@@ -344,30 +446,15 @@ void FileEditor::startSearch()
     const QString raw = m_findInput->text().trimmed();
     if (raw.isEmpty()) {
         m_hex->clearSearchHits();
+        m_hits.clear();
+        m_pattern.clear();
         m_findStatus->setText(QString());
         return;
     }
 
-    // Accept "AA BB CC" hex notation or plain text.
-    QByteArray pattern;
-    static const QRegularExpression hexOnly(QStringLiteral("^[0-9A-Fa-f ]+$"));
-    const bool looksHex = raw.contains(QLatin1Char(' ')) && hexOnly.match(raw).hasMatch();
-    if (looksHex) {
-        const QStringList parts = raw.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-        for (const QString& part : parts) {
-            bool ok = false;
-            const uint value = part.toUInt(&ok, 16);
-            if (!ok || value > 0xFFU) {
-                pattern.clear();
-                break;
-            }
-            pattern.append(static_cast<char>(value));
-        }
-    }
-    if (pattern.isEmpty())
-        pattern = raw.toUtf8();
-
+    const QByteArray pattern = parsePattern(raw);
     m_pattern = pattern;
+    m_hits.clear();
     m_token = CancelToken();
     m_searchRunning = true;
     m_findStatus->setText(QStringLiteral("searching\u2026"));
@@ -384,6 +471,45 @@ void FileEditor::startSearch()
         options.caseInsensitive = !caseSensitive;
         return searchBytes(document->source(), needle, options, token);
     }));
+}
+
+void FileEditor::replaceAll()
+{
+    if (m_document == nullptr)
+        return;
+    if (m_pattern.isEmpty() || m_hits.isEmpty()) {
+        m_findStatus->setText(QStringLiteral("run a search first"));
+        return;
+    }
+
+    const QByteArray replacement = parsePattern(m_replaceInput->text());
+    if (replacement.size() != m_pattern.size()) {
+        m_replaceStatus->setText(
+            QStringLiteral("needs %1 byte(s)").arg(m_pattern.size()));
+        return;
+    }
+
+    const auto answer = QMessageBox::question(
+        this, QStringLiteral("Replace all"),
+        QStringLiteral("Replace %1 match(es) in memory?\n\nThe file on disk is not changed "
+                       "until you save, and each changed byte can be undone.")
+            .arg(m_hits.size()),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes)
+        return;
+
+    const auto replaced = replaceAllEqualLength(*m_document, m_hits, m_pattern, replacement);
+    if (!replaced) {
+        m_replaceStatus->setText(replaced.error().message);
+        return;
+    }
+
+    refreshEditState();
+    const int count = replaced.value();
+    m_hits.clear();
+    m_hex->clearSearchHits();
+    m_replaceStatus->setText(QStringLiteral("replaced %1 in memory").arg(count));
+    m_findStatus->setText(QStringLiteral("save to persist changes"));
 }
 
 void FileEditor::cancelSearch()
@@ -410,6 +536,7 @@ void FileEditor::onSearchFinished()
     }
 
     const SearchResult& found = result.value();
+    m_hits = found.offsets;
     m_hex->setSearchHits(found.offsets, static_cast<int>(m_pattern.size()));
     if (found.offsets.isEmpty()) {
         m_findStatus->setText(QStringLiteral("no matches"));
