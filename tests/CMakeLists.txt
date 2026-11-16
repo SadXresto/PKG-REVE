@@ -22,6 +22,7 @@ add_executable(pkgstudio_tests
     test_hex_search.cpp
     test_replace.cpp
     test_editing.cpp
+    test_save.cpp
     test_ui_editing.cpp
     test_data.cpp
     test_fuzz.cpp

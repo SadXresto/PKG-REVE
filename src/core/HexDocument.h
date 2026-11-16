@@ -5,12 +5,15 @@
 // journal, so editing never rewrites the original file until an explicit save.
 #pragma once
 
+#include "core/CancelToken.h"
 #include "core/FileSource.h"
 
 #include <QByteArray>
 #include <QMap>
 #include <QString>
 #include <QVector>
+
+#include <functional>
 
 namespace pkg {
 
@@ -70,9 +73,18 @@ public:
     /// Reads `length` bytes with pending edits applied.
     [[nodiscard]] Result<QByteArray> readMerged(quint64 offset, quint64 length) const;
 
+    /// Called with (bytes processed, total bytes) from the saving thread.
+    using SaveProgress = std::function<void(quint64, quint64)>;
+
     /// Streams the entire file, with edits applied, into `destination` through a
     /// QSaveFile (temporary file + atomic rename). Returns the byte count.
-    [[nodiscard]] Result<quint64> saveTo(const QString& destination) const;
+    ///
+    /// Safe to run on a worker thread while the UI only paints the document:
+    /// callers must not mutate edits during the call. Cancelling `token` (or a
+    /// failure) removes the temporary file and leaves the destination untouched.
+    [[nodiscard]] Result<quint64> saveTo(const QString& destination,
+                                         const CancelToken& token = CancelToken(),
+                                         const SaveProgress& progress = {}) const;
 
     /// Re-opens the file (for example after saving) and clears edit state.
     [[nodiscard]] Status reloadFrom(const QString& path);

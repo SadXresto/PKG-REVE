@@ -4,6 +4,28 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.4.0] — 2026-11-16
+
+### Added
+
+- Asynchronous saving on the shared worker pool with a window-modal progress dialog reporting
+  backup and write progress. Cancel stops at the next 4 MiB chunk, removes the temporary file,
+  keeps all edits and leaves the original untouched.
+- `HexDocument::saveTo` and `atomic::backupFile` accept a `CancelToken` and a byte-progress
+  callback; cancellation is honoured before creating the temporary file, between chunks and
+  immediately before the atomic commit.
+- Six tests covering pre-cancelled saves, cancellation mid-stream (including leftover temp-file
+  checks), monotonic progress reporting and cancelled backups.
+
+### Changed
+
+- Version 0.4.0. Saving is no longer performed on the UI thread; the file is reopened and the
+  edit journal reset on the UI thread only after the worker committed successfully.
+- The save-failure dialog now distinguishes a failed write from a failed reload after a
+  successful write.
+- Closing a modified tab or the window still waits for Save/Discard/Cancel; cancelling the
+  progress dialog aborts the close instead of losing edits.
+
 ## [0.3.0] — 2026-11-16
 
 ### Added

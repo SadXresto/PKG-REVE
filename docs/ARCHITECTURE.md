@@ -123,12 +123,24 @@ down the process. Serious errors are logged and surfaced in the UI; they are nev
   override differs from the original byte, so undoing everything clears the dirty state.
 - Edits are opt-in per file (`HexView::setEditingEnabled`) and are never written implicitly.
 - `saveTo()` streams the file in 4 MiB chunks with overrides applied into a `QSaveFile`
-  (temporary file in the destination directory + atomic rename). A failure cancels the write and
-  leaves the original and the in-memory edits intact.
-- The window layer performs the safety policy around `saveTo()`: overwrite confirmation,
-  timestamped sibling backup via `atomic::backupFile`, recent-list update, and re-analysis of
-  the saved bytes. `reloadFrom()` reopens the new file and clears the journal, so the saved
-  state becomes the new baseline.
+  (temporary file in the destination directory + atomic rename). It accepts a `CancelToken`
+  and a void `(done, total)` progress callback. Cancellation is checked before the temporary
+  file is created, between chunks and immediately before `commit()`; every cancellation path
+  calls `cancelWriting()` so no partial file survives, and the original and in-memory edits
+  stay intact.
+- `atomic::backupFile` accepts the same token/callback pair and gives the same guarantees.
+- The window layer performs the safety policy around saving: overwrite confirmation, timestamped
+  sibling backup, then the document write, then recent-list update and re-analysis. Backup and
+  write run in one `QtConcurrent::run` job while a window-modal `QProgressDialog` drives a
+  nested event loop, so the window keeps painting and Cancel stays responsive. The modal
+  dialog blocks all edits while the worker reads the mmap and override map; because the worker
+  only performs const reads, no snapshot copy of a multi-gigabyte file is needed.
+- On success the UI thread calls `reloadFrom()`, which reopens the new file and clears the
+  journal so the saved state becomes the new baseline. Progress updates are marshalled to the
+  dialog with queued invocations guarded by a `QPointer`; the worker finishes before the loop
+  exits, so no callback can outlive the dialog.
+- A failed or cancelled save never reloads or clears edits. Save and Cancel results feed
+  `maybeSaveEditor`, so cancelling during a close prompt aborts the close.
 - Closing a modified tab or the window routes through Save / Discard / Cancel; cancelling aborts
   the close. File size cannot change: there is no insert/delete path yet.
 

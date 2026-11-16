@@ -31,6 +31,7 @@
 #include <QDir>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QEventLoop>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
@@ -45,7 +46,9 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPointer>
 #include <QProgressBar>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSplitter>
@@ -1203,23 +1206,88 @@ bool MainWindow::saveEditor(FileEditor* editor, bool saveAs)
                 return false;
         }
 
-        auto backup = atomic::backupFile(target, backupPath);
-        if (!backup) {
-            const QString detail = backup.error().detail.isEmpty()
-                                       ? backup.error().message
-                                       : backup.error().detail;
-            QMessageBox::critical(this, QStringLiteral("Cannot write backup"),
-                                  QStringLiteral("The original file was not modified.\n\n%1")
-                                      .arg(detail));
-            logError(QString::fromLatin1(kLogCategory),
-                     QStringLiteral("Backup failed for %1: %2").arg(target, detail));
-            return false;
-        }
-        logInfo(QString::fromLatin1(kLogCategory),
-                QStringLiteral("Backup written to %1").arg(backupPath));
     }
 
-    const Result<quint64> written = editor->saveTo(target);
+    std::shared_ptr<HexDocument> document = editor->document();
+    if (!document) {
+        QMessageBox::critical(this, QStringLiteral("Cannot save file"),
+                              QStringLiteral("The document is no longer open."));
+        return false;
+    }
+
+    // Backup and save both stream the file, which can take a while for large
+    // packages. Run them on the shared worker pool behind a window-modal
+    // progress dialog so the window keeps painting and Cancel stays live.
+    // Edits cannot change meanwhile: the modal dialog blocks input, and the
+    // document is only read (mmap + override map) by the worker.
+    QProgressDialog progress(this);
+    progress.setWindowTitle(QStringLiteral("Saving file"));
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setLabelText(QStringLiteral("Preparing save\u2026"));
+    progress.setCancelButtonText(QStringLiteral("Cancel"));
+    progress.setRange(0, 100);
+    progress.setMinimumDuration(250);
+    progress.setAutoClose(false);
+    progress.setAutoReset(false);
+    progress.setValue(0);
+
+    CancelToken token;
+    connect(&progress, &QProgressDialog::canceled, &progress,
+            [token]() { token.cancel(); });
+
+    QPointer<QProgressDialog> dialog(&progress);
+    const auto reporter = [dialog, token](int base, int span, const QString& label) {
+        return [dialog, token, base, span, label](quint64 done, quint64 total) {
+            if (token.isCancelled())
+                return;
+            const int percent =
+                total == 0 ? base + span
+                           : base + static_cast<int>((done * static_cast<quint64>(span)) / total);
+            QObject* context = dialog.data();
+            if (context == nullptr)
+                return;
+            QMetaObject::invokeMethod(
+                context,
+                [dialog, percent, label]() {
+                    if (!dialog)
+                        return;
+                    dialog->setLabelText(label);
+                    dialog->setValue(std::clamp(percent, 0, 100));
+                },
+                Qt::QueuedConnection);
+        };
+    };
+
+    const bool hadExistingFile = overwriting;
+    const auto backupReporter =
+        reporter(0, hadExistingFile ? 45 : 0, QStringLiteral("Writing backup\u2026"));
+    const auto saveReporter = reporter(hadExistingFile ? 45 : 0, hadExistingFile ? 55 : 100,
+                                       QStringLiteral("Saving changes\u2026"));
+
+    auto watcher = std::make_shared<QFutureWatcher<Result<quint64>>>();
+    QEventLoop loop;
+    connect(watcher.get(), &QFutureWatcher<Result<quint64>>::finished, &loop,
+            &QEventLoop::quit);
+    watcher->setFuture(QtConcurrent::run(
+        [document, target, backupPath, hadExistingFile, token, backupReporter, saveReporter]() {
+            if (hadExistingFile) {
+                const auto backup =
+                    atomic::backupFile(target, backupPath, token, backupReporter);
+                if (!backup)
+                    return Result<quint64>(backup.error());
+            }
+            return document->saveTo(target, token, saveReporter);
+        }));
+    loop.exec();
+    progress.close();
+
+    const Result<quint64> written = watcher->result();
+    if (token.isCancelled()) {
+        statusBar()->showMessage(QStringLiteral("Save cancelled; edits were kept"), 4000);
+        logInfo(QString::fromLatin1(kLogCategory),
+                QStringLiteral("Save cancelled for %1").arg(target));
+        return false;
+    }
     if (!written) {
         const QString detail = written.error().detail.isEmpty()
                                    ? written.error().message
@@ -1231,6 +1299,24 @@ bool MainWindow::saveEditor(FileEditor* editor, bool saveAs)
                  QStringLiteral("Save failed for %1: %2").arg(target, detail));
         return false;
     }
+
+    // The worker only wrote the file; reopen it and drop edit state on the UI
+    // thread before any repaint can observe a half-updated document.
+    const Status reloaded = editor->reloadFrom(target);
+    if (!reloaded) {
+        const QString detail = reloaded.error().detail.isEmpty()
+                                   ? reloaded.error().message
+                                   : reloaded.error().detail;
+        QMessageBox::critical(this, QStringLiteral("Saved, but reload failed"),
+                              QStringLiteral("The file was written, but reopening it failed.\n\n%1")
+                                  .arg(detail));
+        logError(QString::fromLatin1(kLogCategory),
+                 QStringLiteral("Reload after save failed for %1: %2").arg(target, detail));
+        return false;
+    }
+    if (hadExistingFile)
+        logInfo(QString::fromLatin1(kLogCategory),
+                QStringLiteral("Backup written to %1").arg(backupPath));
 
     m_editors->updateTitle(editor);
     if (editor == currentEditor())

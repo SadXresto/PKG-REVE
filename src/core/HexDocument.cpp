@@ -164,12 +164,15 @@ Result<QByteArray> HexDocument::readMerged(quint64 offset, quint64 length) const
     return merged;
 }
 
-Result<quint64> HexDocument::saveTo(const QString& destination) const
+Result<quint64> HexDocument::saveTo(const QString& destination, const CancelToken& token,
+                                    const SaveProgress& progress) const
 {
     if (!isValid())
         return makeError(QStringLiteral("No document is open"));
     if (destination.isEmpty())
         return makeError(QStringLiteral("Empty destination path"));
+    if (token.isCancelled())
+        return makeError(QStringLiteral("Save cancelled"), destination);
 
     const QFileInfo info(destination);
     const QString directory = info.absolutePath();
@@ -184,7 +187,13 @@ Result<quint64> HexDocument::saveTo(const QString& destination) const
     constexpr quint64 kChunk = 4U * 1024U * 1024U;
     quint64 written = 0;
     const quint64 total = m_source.size();
+    if (progress)
+        progress(0, total);
     while (written < total) {
+        if (token.isCancelled()) {
+            file.cancelWriting();
+            return makeError(QStringLiteral("Save cancelled"), destination);
+        }
         const quint64 length = std::min<quint64>(kChunk, total - written);
         auto chunk = readMerged(written, length);
         if (!chunk) {
@@ -198,13 +207,21 @@ Result<quint64> HexDocument::saveTo(const QString& destination) const
             return makeError(QStringLiteral("Short write while saving"), reason);
         }
         written += length;
+        if (progress)
+            progress(written, total);
     }
 
+    if (token.isCancelled()) {
+        file.cancelWriting();
+        return makeError(QStringLiteral("Save cancelled"), destination);
+    }
     if (!file.commit())
         return makeError(QStringLiteral("Cannot commit the saved file"), file.errorString());
 
+    if (progress)
+        progress(total, total);
     logInfo(QStringLiteral("file"),
-            QStringLiteral("Saved %1 bytes to %2 (%3 edited byte(s))")
+            QStringLiteral("Saved %1 bytes to %2 (%3 edited byte(s), cancellable)")
                 .arg(written)
                 .arg(destination)
                 .arg(m_overrides.size()));

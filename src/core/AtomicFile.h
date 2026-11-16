@@ -5,10 +5,13 @@
 // rename leaves the original untouched.
 #pragma once
 
+#include "core/CancelToken.h"
 #include "core/Result.h"
 
 #include <QByteArray>
 #include <QString>
+
+#include <functional>
 
 namespace pkg::atomic {
 
@@ -19,6 +22,11 @@ namespace pkg::atomic {
 [[nodiscard]] Result<QByteArray> readFile(const QString& path, quint64 maxBytes);
 
 /// Copies `source` to `backupPath` atomically. Returns the backup size.
-[[nodiscard]] Result<quint64> backupFile(const QString& source, const QString& backupPath);
+/// Cancellation removes the temporary file; the source and any existing backup
+/// at `backupPath` are untouched.
+[[nodiscard]] Result<quint64> backupFile(
+    const QString& source, const QString& backupPath,
+    const CancelToken& token = CancelToken(),
+    const std::function<void(quint64, quint64)>& progress = {});
 
 }  // namespace pkg::atomic

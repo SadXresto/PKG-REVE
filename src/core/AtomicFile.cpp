@@ -55,8 +55,13 @@ Result<QByteArray> readFile(const QString& path, quint64 maxBytes)
     return source.value().readAllCapped(maxBytes, token);
 }
 
-Result<quint64> backupFile(const QString& source, const QString& backupPath)
+Result<quint64> backupFile(const QString& source, const QString& backupPath,
+                           const CancelToken& token,
+                           const std::function<void(quint64, quint64)>& progress)
 {
+    if (token.isCancelled())
+        return makeError(QStringLiteral("Backup cancelled"), source);
+
     auto src = FileSource::open(source);
     if (!src)
         return src.error();
@@ -73,11 +78,19 @@ Result<quint64> backupFile(const QString& source, const QString& backupPath)
     constexpr quint64 kChunk = 4U * 1024U * 1024U;
     const quint64 totalSize = static_cast<quint64>(std::max<qint64>(0, info.size()));
     quint64 copied = 0;
+    if (progress)
+        progress(0, totalSize);
     while (copied < totalSize) {
+        if (token.isCancelled()) {
+            file.cancelWriting();
+            return makeError(QStringLiteral("Backup cancelled"), backupPath);
+        }
         const quint64 length = std::min<quint64>(kChunk, totalSize - copied);
         auto chunk = src.value().view(copied, length);
-        if (!chunk)
+        if (!chunk) {
+            file.cancelWriting();
             return chunk.error();
+        }
         const auto bytes = chunk.value();
         if (file.write(reinterpret_cast<const char*>(bytes.data()),
                        static_cast<qint64>(bytes.size())) < 0) {
@@ -85,12 +98,22 @@ Result<quint64> backupFile(const QString& source, const QString& backupPath)
             return makeError(QStringLiteral("Cannot write backup"), file.errorString());
         }
         copied += length;
+        if (progress)
+            progress(copied, totalSize);
+    }
+    if (token.isCancelled()) {
+        file.cancelWriting();
+        return makeError(QStringLiteral("Backup cancelled"), backupPath);
     }
     if (!file.commit())
         return makeError(QStringLiteral("Cannot commit backup"), file.errorString());
 
+    if (progress)
+        progress(totalSize, totalSize);
     logInfo(QStringLiteral("file"),
-            QStringLiteral("Backup written: %1 (%2 bytes)").arg(backupPath).arg(copied));
+            QStringLiteral("Backup written: %1 (%2 bytes, cancellable)")
+                .arg(backupPath)
+                .arg(copied));
     return copied;
 }
 

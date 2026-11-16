@@ -26,10 +26,11 @@ analysis cache. Not done: ZIP64 directories, section/symbol tables, imports/expo
 
 Implemented: live byte inspector (offset/hex/dec/bin/ASCII, signed/unsigned integers in both
 endiannesses, floats), bounded signature scanner with confidence and analysis/cache integration,
-hex overlay for signature ranges, same-length replace with undo.
+hex overlay for signature ranges, same-length replace with undo, and cancellable background
+saving with progress.
 
 Not implemented: insert/delete (requires a variable-length document model), multi-range
-selection, bookmarks/annotations, binary comparison, patch history and background saving.
+selection, bookmarks/annotations, binary comparison and patch history.
 
 ## Phase 4 — Platform adapters: **partial**
 

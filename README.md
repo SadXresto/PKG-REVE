@@ -6,7 +6,7 @@ runtime.
 
 ![PKG Studio with the dark theme](docs/screenshots/theme-dark.png)
 
-**Version 0.3.0.** This repository contains a real, running application: the VS Code-style
+**Version 0.4.0.** This repository contains a real, running application: the VS Code-style
 shell with the Void Black design system, the SQLite data layer, the format analysis core with
 signature confidence, and a hex workspace with a live byte inspector, signature overlay,
 same-length replace, opt-in editing, undo/redo and backup-on-save. Disassembly, debugging,
@@ -57,10 +57,12 @@ the honest status of every phase.
   the accent colour.
 - **Undo/redo** per file (`Ctrl+Z`, `Ctrl+Shift+Z`), with the redo branch dropped when you edit
   after undoing. Edits stay in memory until saved and never touch the file implicitly.
-- **Safe saving**: `Ctrl+S` / `Ctrl+Shift+S` (Save as). Overwriting an existing file asks for
-  confirmation (unless disabled in Settings) and always writes a timestamped backup
-  (`name.pkgstudio-backup-YYYYMMDD-HHMMSS.bak`) before an atomic replacement. Failed saves
-  leave the original untouched and keep your edits.
+- **Safe, non-blocking saving**: `Ctrl+S` / `Ctrl+Shift+S` (Save as). Overwriting an existing
+  file asks for confirmation (unless disabled in Settings) and always writes a timestamped
+  backup (`name.pkgstudio-backup-YYYYMMDD-HHMMSS.bak`) before an atomic replacement.
+  Backup and write stream on a worker thread with a window-modal progress dialog; **Cancel**
+  deletes the temporary file, keeps every edit and leaves the original untouched. Failed saves
+  behave the same way, and closing a modified tab waits for the save so Cancel keeps it open.
 - Same-size editing only: bytes can be replaced, not inserted or deleted, and there is no
   multi-range paste or clip extraction yet.
 

@@ -37,8 +37,8 @@ RelWithDebInfo unless stated):
 
 | Check | Result |
 | --- | --- |
-| `ctest` / direct run | **73 tests in 20 suites, all passed**, ~0.7 s |
-| ASan + UBSan run (Debug) | **73/73 passed**, no reports |
+| `ctest` / direct run | **78 tests in 22 suites, all passed**, ~1.5 s |
+| ASan + UBSan run (Debug) | **78/78 passed**, no reports |
 | `--selftest` with 6 fixtures | PASS, 6 files analysed, exit code 0, RSS ≈ 44.6 MiB |
 | 8 GiB sparse file: mmap, tail read, row count, search | passed, elapsed below the 1 ms timer resolution, RSS growth ≈ 816 KiB |
 | 3000 random row reads on a 64 MiB file | passed in ~40 ms (test wall time) |
@@ -56,6 +56,7 @@ package and no Windows build have been measured yet.
 | Hex + search | `test_hex_search.cpp` | row layout, chunk-boundary matches, case-insensitive search, hit limit, cancellation, empty pattern |
 | Byte editing | `test_editing.cpp` | merged reads, undo/redo, redo-branch discard, no-op/out-of-range rejection, save content and size, 4 MiB chunk-boundary save, reload/reset, invalid destinations |
 | Replace | `test_replace.cpp` | equal-length replacement at search offsets, undo, length mismatch, empty pattern, out-of-range offsets |
+| Async save | `test_save.cpp` | pre-cancelled save creates nothing, mid-stream cancel leaves destination and temp files absent, monotonic progress to 100%, cancelled backup leaves source intact, backup byte-for-byte copy |
 | Signatures | `test_signatures.cpp` | ELF/ZIP/PS4/Vita/PNG validation, embedded-match confidence, no false positives, MZ-only low confidence, analysis JSON + section integration |
 | Inspector data | `test_inspector.cpp` | endianness, signed values, binary/hex/ASCII formatting, float interpretation, empty input |
 | Theme system | `test_data.cpp` | Void Black exact tokens and default fallback, 7:1/4.5:1 contrast checks, built-in theme completeness |
@@ -64,8 +65,10 @@ package and no Windows build have been measured yet.
 | Fuzz-style | `test_fuzz.cpp` | 1500 random buffers, every truncation of every fixture, 300 random PKG headers with huge counts, 200 malformed ZIP directories |
 | Performance bounds | `test_performance.cpp` | 8 GiB sparse file stays streamed, constant-time row access |
 
-The upgrade added widget-level inspector/signature wiring and a same-length replace path; both
-are covered at the data level. Dialog-driven replace confirmation is not automated.
+The upgrade added widget-level inspector/signature wiring, a same-length replace path and
+cancellable background saving. All three are covered at the data level. Dialog-driven replace
+confirmation and the save progress dialog's buttons are not automated; the nested event loop
+around the dialog was reviewed but not clicked through by a test.
 
 The fuzz tests are deterministic (fixed xorshift seed), so failures are reproducible. They are
 not a substitute for coverage-guided fuzzing; see below.
