@@ -1,0 +1,21 @@
+{
+  "format": "pkgstudio.structure",
+  "version": 1,
+  "id": "builtin.png-ihdr",
+  "name": "PNG signature and IHDR chunk",
+  "description": "Big-endian example covering the PNG signature and the first chunk header/IHDR fields.",
+  "endianness": "big",
+  "fields": [
+    {"name": "signature", "type": "bytes", "offset": 0, "length": 8},
+    {"name": "chunk_length", "type": "u32", "offset": 8, "description": "Must be 13 for IHDR."},
+    {"name": "chunk_type", "type": "ascii", "offset": 12, "length": 4},
+    {"name": "width", "type": "u32", "offset": 16},
+    {"name": "height", "type": "u32", "offset": 20},
+    {"name": "bit_depth", "type": "u8", "offset": 24},
+    {"name": "color_type", "type": "u8", "offset": 25},
+    {"name": "compression", "type": "u8", "offset": 26},
+    {"name": "filter", "type": "u8", "offset": 27},
+    {"name": "interlace", "type": "u8", "offset": 28},
+    {"name": "crc32", "type": "u32", "offset": 29}
+  ]
+}

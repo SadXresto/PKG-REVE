@@ -10,6 +10,15 @@ Sidebar, explorer, tabs, command palette, status bar, output panel, theme manage
 themes and a theme editor, settings dialog with shortcut customization, logging, session
 restore, recent files. Panels are resizable split views (not dockable floating windows).
 
+## Product experience upgrade (2026-11-17)
+
+- Priority 1 — Visual binary structure builder: **done for declarative templates** (JSON schema,
+  nested structs, arrays, endianness, tree, hex sync, validation, built-ins, editor, docs).
+  Not implemented: drag/drop visual field editing, dynamic lengths/offsets, unions.
+- Priority 8 — Smart command center: **done** (commands with shortcuts/descriptions, open files,
+  analysis, settings-related commands, offline documentation, recent actions, ranked search).
+- Priorities 2–7 and 9–10: **not started** in this session.
+
 ## Phase 2 — Design system / Void Black: **done**
 
 Void Black default palette, Neon Hex, shared role tokens and component sheet, preferred

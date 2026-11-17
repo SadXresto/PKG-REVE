@@ -18,6 +18,8 @@ add_executable(pkgstudio_tests
     test_parsers.cpp
     test_pkg_parsers.cpp
     test_signatures.cpp
+    test_structure.cpp
+    test_command.cpp
     test_inspector.cpp
     test_hex_search.cpp
     test_replace.cpp
@@ -30,6 +32,8 @@ add_executable(pkgstudio_tests
 )
 
 target_include_directories(pkgstudio_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(pkgstudio_tests PRIVATE
+    PKGSTUDIO_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(pkgstudio_tests PRIVATE
     pkgstudio_app
     GTest::gtest

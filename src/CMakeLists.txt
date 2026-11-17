@@ -14,6 +14,7 @@ add_library(pkgstudio_core STATIC
     core/ProcessInfo.cpp
     core/Signature.cpp
     core/SignatureScanner.cpp
+    core/Structure.cpp
     core/parsers/ElfParser.cpp
     core/parsers/ParserSupport.cpp
     core/parsers/PeParser.cpp
@@ -39,6 +40,7 @@ add_library(pkgstudio_app STATIC
     ui/EditorArea.cpp
     ui/FileEditor.cpp
     ui/FileExplorer.cpp
+    ui/HelpDialog.cpp
     ui/HexView.cpp
     ui/Icons.cpp
     ui/MainWindow.cpp
@@ -47,6 +49,7 @@ add_library(pkgstudio_app STATIC
     ui/RecentPanel.cpp
     ui/SearchPanel.cpp
     ui/SettingsDialog.cpp
+    ui/StructurePanel.cpp
     ui/ThemeEditorDialog.cpp
     ui/WelcomePage.cpp
 )

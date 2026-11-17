@@ -13,7 +13,9 @@
 #include "ui/EditorArea.h"
 #include "ui/FileEditor.h"
 #include "ui/FileExplorer.h"
+#include "ui/HelpDialog.h"
 #include "ui/HexView.h"
+#include "ui/StructurePanel.h"
 #include "ui/OutputPanel.h"
 #include "ui/PackageInfoView.h"
 #include "ui/RecentPanel.h"
@@ -343,7 +345,11 @@ QAction* MainWindow::addCommand(const QString& id, const QString& title,
     action->setObjectName(id);
     action->setShortcut(Settings::instance().shortcut(id, defaultShortcut));
     action->setShortcutContext(Qt::WindowShortcut);
-    connect(action, &QAction::triggered, this, [handler = std::move(handler)]() { handler(); });
+    connect(action, &QAction::triggered, this,
+            [this, id, handler = std::move(handler)]() {
+                recordRecentCommand(id);
+                handler();
+            });
     addAction(action);
     m_commands.insert(id, action);
     m_defaultShortcuts.insert(id, defaultShortcut);
@@ -493,6 +499,165 @@ void MainWindow::buildCommands()
                helpCategory, QKeySequence(), [this]() { showLegalNotice(); });
     addCommand(QStringLiteral("help.about"), QStringLiteral("About PKG Studio"), helpCategory,
                QKeySequence(QStringLiteral("F1")), [this]() { showAbout(); });
+
+    addCommand(QStringLiteral("view.structureBuilder"),
+               QStringLiteral("Toggle structure builder"), viewCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+B")), [this]() {
+                   FileEditor* editor = currentEditor();
+                   if (editor == nullptr) {
+                       statusBar()->showMessage(
+                           QStringLiteral("Open a file to use the structure builder"), 3000);
+                       return;
+                   }
+                   editor->toggleStructurePanel();
+               });
+    addCommand(QStringLiteral("tools.structureTemplateLoad"),
+               QStringLiteral("Structure: load template\u2026"), toolsCategory, QKeySequence(),
+               [this]() {
+                   if (FileEditor* editor = currentEditor())
+                       editor->openStructureTemplate();
+               });
+    addCommand(QStringLiteral("tools.structureTemplateEdit"),
+               QStringLiteral("Structure: edit template\u2026"), toolsCategory, QKeySequence(),
+               [this]() {
+                   if (FileEditor* editor = currentEditor())
+                       editor->editStructureTemplate();
+               });
+
+    addCommand(QStringLiteral("help.guide"), QStringLiteral("Getting started guide"),
+               helpCategory, QKeySequence(),
+               [this]() { showHelpTopic(QStringLiteral("help.guide")); });
+    addCommand(QStringLiteral("help.shortcuts"), QStringLiteral("Keyboard shortcuts"),
+               helpCategory, QKeySequence(),
+               [this]() { showHelpTopic(QStringLiteral("help.shortcuts")); });
+    addCommand(QStringLiteral("help.structureTemplates"),
+               QStringLiteral("Structure template guide"), helpCategory, QKeySequence(),
+               [this]() { showHelpTopic(QStringLiteral("help.structureTemplates")); });
+    addCommand(QStringLiteral("help.limitations"), QStringLiteral("Limitations and scope"),
+               helpCategory, QKeySequence(),
+               [this]() { showHelpTopic(QStringLiteral("help.limitations")); });
+
+    const auto describe = [this](const QString& id, const QString& description,
+                                 const QString& keywords = QString()) {
+        m_commandDescriptions.insert(id, description);
+        m_commandKeywords.insert(id, keywords);
+        if (QAction* action = m_commands.value(id)) {
+            action->setToolTip(description);
+            action->setStatusTip(description);
+        }
+    };
+    describe(QStringLiteral("file.newProject"),
+             QStringLiteral("Create a project database and working folders"),
+             QStringLiteral("workspace folder"));
+    describe(QStringLiteral("file.openProject"),
+             QStringLiteral("Open a folder as the current project"), QStringLiteral("workspace"));
+    describe(QStringLiteral("file.openFile"),
+             QStringLiteral("Open a binary for read-only analysis or editing"),
+             QStringLiteral("browse binary package"));
+    describe(QStringLiteral("file.save"),
+             QStringLiteral("Write pending byte edits with a backup and atomic replace"),
+             QStringLiteral("write backup"));
+    describe(QStringLiteral("file.saveAs"),
+             QStringLiteral("Write pending byte edits to another path"),
+             QStringLiteral("copy export"));
+    describe(QStringLiteral("file.exportReport"),
+             QStringLiteral("Export the current analysis text report"),
+             QStringLiteral("report txt"));
+    describe(QStringLiteral("file.exit"), QStringLiteral("Close every tab and quit PKG Studio"),
+             QStringLiteral("quit"));
+    describe(QStringLiteral("edit.undo"), QStringLiteral("Undo the last byte edit"),
+             QStringLiteral("revert history"));
+    describe(QStringLiteral("edit.redo"), QStringLiteral("Reapply the last undone byte edit"),
+             QStringLiteral("history"));
+    describe(QStringLiteral("edit.find"), QStringLiteral("Search the current file for text or bytes"),
+             QStringLiteral("search hex ascii find"));
+    describe(QStringLiteral("edit.goto"), QStringLiteral("Jump to a decimal or 0x hexadecimal offset"),
+             QStringLiteral("seek address position"));
+    describe(QStringLiteral("edit.copyHex"), QStringLiteral("Copy the selected bytes as hex text"),
+             QStringLiteral("clipboard"));
+    describe(QStringLiteral("edit.copyAscii"),
+             QStringLiteral("Copy the selected bytes as ASCII text"),
+             QStringLiteral("clipboard text"));
+    describe(QStringLiteral("edit.selectAll"), QStringLiteral("Select every byte in the file"),
+             QStringLiteral("selection"));
+    describe(QStringLiteral("view.explorer"), QStringLiteral("Show the project file explorer"),
+             QStringLiteral("sidebar files"));
+    describe(QStringLiteral("view.search"),
+             QStringLiteral("Search file names and contents in the project"),
+             QStringLiteral("find project"));
+    describe(QStringLiteral("view.recent"), QStringLiteral("Show recently opened files"),
+             QStringLiteral("history"));
+    describe(QStringLiteral("view.togglePanel"), QStringLiteral("Show or hide the output panel"),
+             QStringLiteral("diagnostics log panel"));
+    describe(QStringLiteral("view.themeEditor"), QStringLiteral("Open the theme editor"),
+             QStringLiteral("settings colors appearance void black"));
+    describe(QStringLiteral("view.lightweight"),
+             QStringLiteral("Toggle reduced animation and effects"),
+             QStringLiteral("performance settings"));
+    describe(QStringLiteral("view.zoomIn"), QStringLiteral("Increase the editor font size"),
+             QStringLiteral("settings text"));
+    describe(QStringLiteral("view.zoomOut"), QStringLiteral("Decrease the editor font size"),
+             QStringLiteral("settings text"));
+    describe(QStringLiteral("view.commandPalette"),
+             QStringLiteral("Search commands, files, analysis tools and help"),
+             QStringLiteral("quick open launcher"));
+    describe(QStringLiteral("view.structureBuilder"),
+             QStringLiteral("Show or hide the binary structure builder"),
+             QStringLiteral("layout template fields offsets hex"));
+    describe(QStringLiteral("tools.settings"), QStringLiteral("Open application settings"),
+             QStringLiteral("preferences options"));
+    describe(QStringLiteral("tools.exportLog"), QStringLiteral("Export the session log"),
+             QStringLiteral("diagnostics log"));
+    describe(QStringLiteral("tools.dataFolder"),
+             QStringLiteral("Open the settings, log and template folder"),
+             QStringLiteral("storage templates"));
+    describe(QStringLiteral("tools.clearCache"),
+             QStringLiteral("Delete cached parser results"), QStringLiteral("analysis cache"));
+    describe(QStringLiteral("tools.diagnostics"),
+             QStringLiteral("Show runtime, memory and database diagnostics"),
+             QStringLiteral("system info"));
+    describe(QStringLiteral("tools.structureTemplateLoad"),
+             QStringLiteral("Load a structure template JSON file"),
+             QStringLiteral("layout fields import"));
+    describe(QStringLiteral("tools.structureTemplateEdit"),
+             QStringLiteral("Create, validate or save a structure template"),
+             QStringLiteral("layout fields offsets types"));
+    describe(QStringLiteral("help.formats"),
+             QStringLiteral("List parsed formats and explicit non-goals"),
+             QStringLiteral("supported parsers"));
+    describe(QStringLiteral("help.legal"), QStringLiteral("Show the authorized-use notice"),
+             QStringLiteral("license scope"));
+    describe(QStringLiteral("help.about"), QStringLiteral("Version, licence and build details"),
+             QStringLiteral("version"));
+    describe(QStringLiteral("help.guide"),
+             QStringLiteral("Offline walkthrough of the main workflows"),
+             QStringLiteral("tutorial documentation manual offline"));
+    describe(QStringLiteral("help.shortcuts"),
+             QStringLiteral("Offline reference for keyboard shortcuts"),
+             QStringLiteral("keys documentation"));
+    describe(QStringLiteral("help.structureTemplates"),
+             QStringLiteral("Offline guide to the structure template schema"),
+             QStringLiteral("documentation schema json layout"));
+    describe(QStringLiteral("help.limitations"),
+             QStringLiteral("What is intentionally not supported or confirmed"),
+             QStringLiteral("scope documentation honesty"));
+}
+
+void MainWindow::recordRecentCommand(const QString& id)
+{
+    if (id == QLatin1String("view.commandPalette"))
+        return;
+    m_recentCommands.removeAll(id);
+    m_recentCommands.prepend(id);
+    while (m_recentCommands.size() > 8)
+        m_recentCommands.removeLast();
+}
+
+void MainWindow::showHelpTopic(const QString& id)
+{
+    if (!HelpDialog::showTopic(this, id))
+        logWarning(QString::fromLatin1(kLogCategory),
+                   QStringLiteral("Unknown help topic '%1'").arg(id));
 }
 
 void MainWindow::buildMenus()
@@ -528,6 +693,7 @@ void MainWindow::buildMenus()
     viewMenu->addAction(m_commands.value(QStringLiteral("view.recent")));
     viewMenu->addSeparator();
     viewMenu->addAction(m_commands.value(QStringLiteral("view.togglePanel")));
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.structureBuilder")));
     QAction* lightweight = m_commands.value(QStringLiteral("view.lightweight"));
     lightweight->setCheckable(true);
     lightweight->setChecked(m_settings.lightweight);
@@ -554,8 +720,16 @@ void MainWindow::buildMenus()
     toolsMenu->addAction(m_commands.value(QStringLiteral("tools.dataFolder")));
     toolsMenu->addAction(m_commands.value(QStringLiteral("tools.clearCache")));
     toolsMenu->addAction(m_commands.value(QStringLiteral("tools.diagnostics")));
+    toolsMenu->addSeparator();
+    toolsMenu->addAction(m_commands.value(QStringLiteral("tools.structureTemplateLoad")));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("tools.structureTemplateEdit")));
 
     auto* helpMenu = menuBar()->addMenu(QStringLiteral("&Help"));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.guide")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.shortcuts")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.structureTemplates")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.limitations")));
+    helpMenu->addSeparator();
     helpMenu->addAction(m_commands.value(QStringLiteral("help.formats")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.legal")));
     helpMenu->addSeparator();
@@ -604,22 +778,93 @@ void MainWindow::runCommand(const QString& id)
 void MainWindow::showCommandPalette()
 {
     QList<CommandPalette::Entry> entries;
-    entries.reserve(m_commandOrder.size());
+
+    const auto addRecent = [&entries](const QString& id, QAction* action) {
+        CommandPalette::Entry entry;
+        entry.id = QStringLiteral("cmd:") + id;
+        entry.title = action->text();
+        entry.category = QStringLiteral("Recent");
+        entry.shortcut = keySequenceText(action->shortcut());
+        entry.description = QStringLiteral("Recently used command");
+        entry.keywords = QStringLiteral("history recent");
+        entries.append(entry);
+    };
+    for (const QString& id : m_recentCommands) {
+        if (QAction* action = m_commands.value(id); action != nullptr && action->isEnabled())
+            addRecent(id, action);
+    }
+
+    entries.reserve(entries.size() + m_commandOrder.size() + 16);
     for (const QString& id : m_commandOrder) {
         QAction* action = m_commands.value(id);
         if (action == nullptr || !action->isEnabled())
             continue;
         CommandPalette::Entry entry;
-        entry.id = id;
+        entry.id = QStringLiteral("cmd:") + id;
         entry.title = action->text();
         entry.category = m_commandCategories.value(id);
         entry.shortcut = keySequenceText(action->shortcut());
+        entry.description = m_commandDescriptions.value(
+            id, QStringLiteral("%1 command").arg(entry.category));
+        entry.keywords = m_commandKeywords.value(id) + QLatin1Char(' ') + entry.category;
+        entries.append(entry);
+    }
+
+    // Open files are first-class palette results, not just tab titles.
+    for (int i = 0; i < m_editors->count(); ++i) {
+        FileEditor* editor = m_editors->editorAt(i);
+        if (editor == nullptr || editor->path().isEmpty())
+            continue;
+        CommandPalette::Entry entry;
+        entry.id = QStringLiteral("file:") + editor->path();
+        entry.title = QStringLiteral("Switch to %1").arg(QFileInfo(editor->path()).fileName());
+        entry.category = QStringLiteral("Open file");
+        entry.description = editor->path();
+        entry.keywords = QStringLiteral("tab document switch jump");
+        entries.append(entry);
+    }
+
+    if (FileEditor* editor = currentEditor()) {
+        CommandPalette::Entry analysis;
+        analysis.id = QStringLiteral("analysis.show");
+        analysis.title = QStringLiteral("Show analysis for %1")
+                             .arg(QFileInfo(editor->path()).fileName());
+        analysis.category = QStringLiteral("Analysis");
+        analysis.description =
+            QStringLiteral("Open the Analysis tab with parser findings and warnings");
+        analysis.keywords = QStringLiteral("parser format report hex structure");
+        entries.append(analysis);
+    }
+
+    for (const HelpDialog::Topic& topic : HelpDialog::topics()) {
+        CommandPalette::Entry entry;
+        entry.id = QStringLiteral("cmd:") + topic.id;
+        entry.title = topic.title;
+        entry.category = QStringLiteral("Documentation");
+        entry.description = topic.description;
+        entry.keywords = QStringLiteral("help docs offline manual tutorial guide");
         entries.append(entry);
     }
 
     CommandPalette palette(entries, this);
-    connect(&palette, &CommandPalette::commandChosen, this, &MainWindow::runCommand);
+    QString chosen;
+    connect(&palette, &CommandPalette::commandChosen, this,
+            [&chosen](const QString& id) { chosen = id; });
     palette.exec();
+    if (chosen.isEmpty())
+        return;
+
+    if (chosen.startsWith(QLatin1String("cmd:"))) {
+        runCommand(chosen.mid(4));
+    } else if (chosen.startsWith(QLatin1String("file:"))) {
+        if (FileEditor* editor = m_editors->editorForPath(chosen.mid(5))) {
+            m_editors->setCurrentWidget(editor);
+            statusBar()->showMessage(QStringLiteral("Switched to %1").arg(editor->path()), 3000);
+        }
+    } else if (chosen == QLatin1String("analysis.show")) {
+        if (FileEditor* editor = currentEditor())
+            editor->showAnalysisTab();
+    }
 }
 
 void MainWindow::switchSidebar(const QString& id)
@@ -767,6 +1012,24 @@ bool MainWindow::showByteInspectorForCurrentEditor()
         return false;
     editor->showByteInspectorAt(editor->hexView()->cursorOffset());
     return true;
+}
+
+bool MainWindow::showStructureForCurrentEditor()
+{
+    FileEditor* editor = currentEditor();
+    if (editor == nullptr || editor->structurePanel() == nullptr)
+        return false;
+    QString templateId = QStringLiteral("builtin.elf64-le-header");
+    switch (editor->analysisInfo().kind) {
+    case FormatKind::Zip:
+    case FormatKind::Apk:
+        templateId = QStringLiteral("builtin.zip-local-header");
+        break;
+    default:
+        break;
+    }
+    editor->showStructurePanel(true);
+    return editor->structurePanel()->selectTemplateById(templateId);
 }
 
 void MainWindow::updateFileStatus(FileEditor* editor)

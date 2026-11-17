@@ -6,7 +6,7 @@ runtime.
 
 ![PKG Studio with the dark theme](docs/screenshots/theme-dark.png)
 
-**Version 0.4.0.** This repository contains a real, running application: the VS Code-style
+**Version 0.5.0.** This repository contains a real, running application: the VS Code-style
 shell with the Void Black design system, the SQLite data layer, the format analysis core with
 signature confidence, and a hex workspace with a live byte inspector, signature overlay,
 same-length replace, opt-in editing, undo/redo and backup-on-save. Disassembly, debugging,
@@ -52,6 +52,15 @@ the honest status of every phase.
   and the validation performed. Embedded matches are reported at lower confidence.
 - **Replace all** with equal-length replacements (hex or text) after a search, applied in
   memory with confirmation and undo. Changing the file length is still unsupported.
+- **Visual structure builder**: JSON templates define fields, offsets, lengths, types,
+  endianness, arrays and nested structs; the tree shows decoded values next to the bytes and
+  selecting a field selects that byte range in the hex view (and vice versa). Out-of-bounds
+  fields are obvious errors, never guessed values. Templates are explicitly labelled as
+  interpretations, not format confirmation. Built-in ELF64/ZIP/PNG examples and a template
+  editor with validation are included.
+- **Smart command center** (`Ctrl+Shift+P`): fuzzy-ranked search across every command (with its
+  current shortcut), open files, the analysis tab, settings-related commands, offline help
+  topics and recently used actions. Arrow keys navigate without leaving the search field.
 - **Opt-in byte editing**: click *Editing off* in the file header to start. Type two hex digits
   in the hex column or a printable character in the ASCII column; modified bytes are shown in
   the accent colour.
@@ -66,7 +75,7 @@ the honest status of every phase.
 - Same-size editing only: bytes can be replaced, not inserted or deleted, and there is no
   multi-range paste or clip extraction yet.
 
-![Live byte inspector and signature overlay in Void Black](docs/screenshots/inspector-voidblack.png)
+![Visual structure builder with the ELF64 example template in Void Black](docs/screenshots/structure-voidblack.png)
 
 **Configuration and theming**
 - SQLite-backed settings: theme, editor font family/size, hex bytes per row and grouping,
@@ -149,6 +158,7 @@ Set `PKGSTUDIO_DATA_DIR` to override; the tests use this to stay isolated. The d
 
 ## Documentation
 
+- [docs/STRUCTURE-TEMPLATES.md](docs/STRUCTURE-TEMPLATES.md) — structure template schema, limits and examples.
 - [docs/AUDIT-2026-11-16.md](docs/AUDIT-2026-11-16.md) — repository audit and phased upgrade plan.
 - [docs/DESIGN.md](docs/DESIGN.md) — Void Black design tokens and component rules.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — layers, data flow, threading, error model.

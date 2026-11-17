@@ -1,0 +1,30 @@
+{
+  "format": "pkgstudio.structure",
+  "version": 1,
+  "id": "builtin.elf64-le-header",
+  "name": "ELF64 header (little-endian)",
+  "description": "Example layout for the 64-byte ELF header, as used by the sample ELF. Offsets follow the ELF specification; this template does not verify that a file is an ELF.",
+  "endianness": "little",
+  "fields": [
+    {"name": "e_ident_magic", "type": "bytes", "offset": 0, "length": 4, "description": "0x7F 'E' 'L' 'F' for ELF files."},
+    {"name": "ei_class", "type": "u8", "offset": 4, "description": "1 = 32-bit, 2 = 64-bit."},
+    {"name": "ei_data", "type": "u8", "offset": 5, "description": "1 = little-endian, 2 = big-endian."},
+    {"name": "ei_version", "type": "u8", "offset": 6},
+    {"name": "ei_osabi", "type": "u8", "offset": 7},
+    {"name": "ei_abiversion", "type": "u8", "offset": 8},
+    {"name": "ei_pad", "type": "bytes", "offset": 9, "length": 7},
+    {"name": "e_type", "type": "u16", "offset": 16},
+    {"name": "e_machine", "type": "u16", "offset": 18},
+    {"name": "e_version", "type": "u32", "offset": 20},
+    {"name": "e_entry", "type": "u64", "offset": 24},
+    {"name": "e_phoff", "type": "u64", "offset": 32},
+    {"name": "e_shoff", "type": "u64", "offset": 40},
+    {"name": "e_flags", "type": "u32", "offset": 48},
+    {"name": "e_ehsize", "type": "u16", "offset": 52},
+    {"name": "e_phentsize", "type": "u16", "offset": 54},
+    {"name": "e_phnum", "type": "u16", "offset": 56},
+    {"name": "e_shentsize", "type": "u16", "offset": 58},
+    {"name": "e_shnum", "type": "u16", "offset": 60},
+    {"name": "e_shstrndx", "type": "u16", "offset": 62}
+  ]
+}

@@ -49,6 +49,9 @@ public:
     bool showAnalysisTabForCurrentEditor();
     /// Diagnostic/screenshot helper for the live byte inspector.
     bool showByteInspectorForCurrentEditor();
+    /// Diagnostic/screenshot helper: opens the structure builder with the
+    /// built-in example that matches the current analysis kind.
+    bool showStructureForCurrentEditor();
     void openProject(const QString& path);
     void showWelcome();
     void showSettings();
@@ -78,6 +81,8 @@ private:
     QAction* addCommand(const QString& id, const QString& title, const QString& category,
                         const QKeySequence& defaultShortcut, std::function<void()> handler);
     void refreshShortcuts();
+    void recordRecentCommand(const QString& id);
+    void showHelpTopic(const QString& id);
     void runCommand(const QString& id);
     [[nodiscard]] QList<QString> commandIds() const { return m_commandOrder; }
 
@@ -144,7 +149,10 @@ private:
     QHash<QString, QAction*> m_commands;
     QHash<QString, QKeySequence> m_defaultShortcuts;
     QHash<QString, QString> m_commandCategories;
+    QHash<QString, QString> m_commandDescriptions;
+    QHash<QString, QString> m_commandKeywords;
     QList<QString> m_commandOrder;
+    QList<QString> m_recentCommands;
     QMenu* m_themeMenu = nullptr;
 
     QHash<FileEditor*, std::shared_ptr<QFutureWatcher<Result<PackageInfo>>>> m_analyses;

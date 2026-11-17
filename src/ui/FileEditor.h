@@ -16,6 +16,7 @@
 class QCheckBox;
 class QLabel;
 class QLineEdit;
+class QSplitter;
 class QTabWidget;
 class QToolButton;
 
@@ -23,6 +24,7 @@ namespace pkg::ui {
 
 class ByteInspector;
 class PackageInfoView;
+class StructurePanel;
 
 /// One open file: header strip, hex view, analysis page and an inline find bar
 /// with streaming search running on a worker thread.
@@ -62,6 +64,14 @@ public:
 
     void showFindBar(bool visible);
     void focusFindBar();
+
+    /// Structure builder lives beside the hex view so tree selections can
+    /// highlight bytes without hiding either side.
+    void showStructurePanel(bool visible);
+    void toggleStructurePanel();
+    void openStructureTemplate();
+    void editStructureTemplate();
+    [[nodiscard]] StructurePanel* structurePanel() const { return m_structurePanel; }
     void goToOffsetInteractive();
     void goToOffset(quint64 offset);
 
@@ -86,7 +96,10 @@ private:
     QLabel* m_formatLabel = nullptr;
     QLabel* m_summaryLabel = nullptr;
     QToolButton* m_editToggle = nullptr;
+    QToolButton* m_structureToggle = nullptr;
     QTabWidget* m_tabs = nullptr;
+    QSplitter* m_hexSplitter = nullptr;
+    StructurePanel* m_structurePanel = nullptr;
     HexView* m_hex = nullptr;
     ByteInspector* m_inspector = nullptr;
     PackageInfoView* m_infoView = nullptr;

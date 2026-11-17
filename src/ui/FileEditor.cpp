@@ -5,6 +5,7 @@
 #include "core/SafeMath.h"
 #include "ui/ByteInspector.h"
 #include "ui/PackageInfoView.h"
+#include "ui/StructurePanel.h"
 
 #include <QCheckBox>
 #include <QFileInfo>
@@ -16,6 +17,7 @@
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <QSignalBlocker>
+#include <QSplitter>
 #include <QTabWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -99,6 +101,16 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
                        "file and writes a timestamped backup next to it."));
     headerLayout->addWidget(m_editToggle);
 
+    m_structureToggle = new QToolButton(header);
+    m_structureToggle->setObjectName(QStringLiteral("hintLabel"));
+    m_structureToggle->setCheckable(true);
+    m_structureToggle->setAutoRaise(true);
+    m_structureToggle->setText(QStringLiteral("Structure"));
+    m_structureToggle->setToolTip(
+        QStringLiteral("Show the binary structure builder. Templates describe a layout; "
+                       "they are not a confirmed format."));
+    headerLayout->addWidget(m_structureToggle);
+
     layout->addWidget(header);
 
     m_tabs = new QTabWidget(this);
@@ -110,8 +122,19 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
     hexLayout->setContentsMargins(0, 0, 0, 0);
     hexLayout->setSpacing(0);
 
-    m_hex = new HexView(hexPage);
-    hexLayout->addWidget(m_hex, 1);
+    m_hexSplitter = new QSplitter(Qt::Horizontal, hexPage);
+    m_hexSplitter->setChildrenCollapsible(false);
+    m_hex = new HexView(m_hexSplitter);
+    m_hexSplitter->addWidget(m_hex);
+
+    m_structurePanel = new StructurePanel(m_hexSplitter);
+    m_structurePanel->setDocument(m_document.get());
+    m_structurePanel->setVisible(false);
+    m_hexSplitter->addWidget(m_structurePanel);
+    m_hexSplitter->setStretchFactor(0, 3);
+    m_hexSplitter->setStretchFactor(1, 2);
+    m_hexSplitter->setSizes({660, 570});
+    hexLayout->addWidget(m_hexSplitter, 1);
 
     // Find bar -----------------------------------------------------------
     m_findBar = new QWidget(hexPage);
@@ -220,6 +243,18 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
     connect(m_editToggle, &QToolButton::toggled, this, [this](bool enabled) {
         setEditingEnabled(enabled);
     });
+    connect(m_structureToggle, &QToolButton::toggled, this, &FileEditor::showStructurePanel);
+    connect(m_structurePanel, &StructurePanel::fieldSelected, this,
+            [this](quint64 offset, quint64 length) {
+                m_tabs->setCurrentIndex(0);
+                m_hex->goToOffset(offset);
+                m_hex->setSelection(offset, length);
+                m_hex->setFocus(Qt::OtherFocusReason);
+            });
+    connect(m_hex, &HexView::cursorMoved, this, [this](quint64 offset) {
+        if (m_structurePanel->isVisible())
+            m_structurePanel->highlightOffset(offset);
+    });
     connect(m_findInput, &QLineEdit::returnPressed, this, [this]() { startSearch(); });
     connect(m_caseBox, &QCheckBox::toggled, this, [this](bool) {
         if (!m_pattern.isEmpty())
@@ -271,8 +306,42 @@ void FileEditor::positionInspector()
 void FileEditor::refreshEditState()
 {
     m_hex->notifyDocumentChanged();
+    if (m_structurePanel != nullptr)
+        m_structurePanel->refresh();
     updateTitleLabel();
     emit modificationChanged(isModified());
+}
+
+void FileEditor::showStructurePanel(bool visible)
+{
+    if (m_structurePanel == nullptr)
+        return;
+    if (m_structureToggle->isChecked() != visible) {
+        const QSignalBlocker blocker(m_structureToggle);
+        m_structureToggle->setChecked(visible);
+    }
+    m_structurePanel->setVisible(visible);
+    if (visible) {
+        m_structurePanel->refresh();
+        m_structurePanel->setFocus(Qt::OtherFocusReason);
+    }
+}
+
+void FileEditor::toggleStructurePanel()
+{
+    showStructurePanel(!m_structurePanel->isVisible());
+}
+
+void FileEditor::openStructureTemplate()
+{
+    showStructurePanel(true);
+    m_structurePanel->loadTemplateFile();
+}
+
+void FileEditor::editStructureTemplate()
+{
+    showStructurePanel(true);
+    m_structurePanel->editTemplate();
 }
 
 void FileEditor::setEditingEnabled(bool enabled)
@@ -335,6 +404,8 @@ Status FileEditor::reloadFrom(const QString& path)
     if (!reloaded)
         return reloaded;
     m_hex->notifyDocumentChanged();
+    if (m_structurePanel != nullptr)
+        m_structurePanel->refresh();
     m_formatLabel->setText(fmt::humanBytes(m_document->size()));
     updateTitleLabel();
     m_titleLabel->setToolTip(path);

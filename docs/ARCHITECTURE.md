@@ -91,6 +91,38 @@ Rules every parser follows:
   go through `HexDocument::setByte`, so they are journalled and undoable; the confirmation dialog
   states that the file on disk is untouched until Save.
 
+## Structure templates
+
+- `StructureTemplate::fromJson` parses a declarative layout (`src/core/Structure.*`). Fields
+  have a type, an offset relative to the parent, an optional fixed length, an optional array
+  count and an optional endianness override; structs nest up to eight levels.
+- `validateStructureTemplate` checks the schema and limits without touching a file.
+  `evaluateStructure` then reads through `HexDocument::readMerged` (so pending edits are
+  visible), performs overflow-checked bounds checks and returns a node tree plus error and
+  warning lists. Out-of-bounds fields become `! not read` nodes; values are never invented.
+  Coverage is the union of valid leaf ranges, so overlapping containers are not double-counted.
+- `StructurePanel` owns the template list (built-ins plus `<data>/templates`), the tree and the
+  diagnostics box, and has no hex dependency. `FileEditor` hosts it in a splitter beside
+  `HexView`: `fieldSelected` scrolls/selects the hex range, while `HexView::cursorMoved` calls
+  `highlightOffset`, which selects the deepest containing node with signals blocked to avoid a
+  feedback loop. It refreshes after edits and after save/reload.
+- Templates are explicitly labelled as interpretations. Only the parser/signature path can
+  claim a format.
+
+## Command center and offline help
+
+- Every command is a `QAction` created through `addCommand`, which also records its category,
+  shortcut, description and search keywords. Triggering an action records it in the session's
+  recent list.
+- `MainWindow::showCommandPalette` assembles entries for recent commands, all commands, open
+  editors, the current analysis tab and offline help topics, then runs the chosen id directly
+  (commands, file switches and analysis are distinguished by id prefix).
+- `CommandPalette::rankEntries` is a pure function: every whitespace-separated term must match
+  the title, category, description, keywords or shortcut, and title matches rank above
+  description/category matches. This is covered by unit tests.
+- `HelpDialog` compiles the offline help topics into the binary; no network, installed docs or
+  browser is required.
+
 ## Error model
 
 `Result<T>` holds either a value or a `Status` (`message` + optional `detail`). Expected

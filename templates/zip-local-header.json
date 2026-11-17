@@ -1,0 +1,22 @@
+{
+  "format": "pkgstudio.structure",
+  "version": 1,
+  "id": "builtin.zip-local-header",
+  "name": "ZIP local file header (sample entry)",
+  "description": "Local file header of the first ZIP/APK entry. The file name length is fixed at 19 bytes, which matches 'AndroidManifest.xml' in the bundled sample APK; other archives will need their own length.",
+  "endianness": "little",
+  "fields": [
+    {"name": "signature", "type": "bytes", "offset": 0, "length": 4, "description": "0x04034B50."},
+    {"name": "version_needed", "type": "u16", "offset": 4},
+    {"name": "flags", "type": "u16", "offset": 6},
+    {"name": "method", "type": "u16", "offset": 8},
+    {"name": "mod_time", "type": "u16", "offset": 10},
+    {"name": "mod_date", "type": "u16", "offset": 12},
+    {"name": "crc32", "type": "u32", "offset": 14},
+    {"name": "compressed_size", "type": "u32", "offset": 18},
+    {"name": "uncompressed_size", "type": "u32", "offset": 22},
+    {"name": "name_length", "type": "u16", "offset": 26},
+    {"name": "extra_length", "type": "u16", "offset": 28},
+    {"name": "file_name", "type": "ascii", "offset": 30, "length": 19, "description": "Fixed-size example: read name_length bytes for other archives."}
+  ]
+}

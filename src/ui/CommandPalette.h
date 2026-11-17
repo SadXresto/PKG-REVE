@@ -9,8 +9,8 @@ class QListWidget;
 
 namespace pkg::ui {
 
-/// VS Code style quick command picker. Executes nothing by itself: the caller
-/// reacts to commandChosen().
+/// VS Code style quick picker used as the Smart Command Center. It executes
+/// nothing itself: the caller reacts to commandChosen() with the entry id.
 class CommandPalette : public QDialog {
     Q_OBJECT
 
@@ -20,14 +20,24 @@ public:
         QString title;
         QString category;
         QString shortcut;
+        QString description;
+        /// Extra search terms (synonyms), never displayed.
+        QString keywords;
     };
 
     explicit CommandPalette(QList<Entry> entries, QWidget* parent = nullptr);
 
     [[nodiscard]] QString selectedCommandId() const;
+    /// Pure ranking helper: filters by every whitespace-separated term and
+    /// prefers title matches, so it can be unit tested without a widget.
+    [[nodiscard]] static QList<Entry> rankEntries(const QList<Entry>& entries,
+                                                  const QString& query);
 
 signals:
     void commandChosen(const QString& id);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void refilter(const QString& text);

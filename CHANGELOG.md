@@ -4,6 +4,42 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.5.0] — 2026-11-17
+
+### Added
+
+- **Visual binary structure builder** beside the hex view: JSON templates with offsets, fixed
+  lengths, primitive/text/bytes types, per-field endianness, arrays and nested structs. A
+  hierarchical tree shows decoded values; tree selection selects and scrolls the hex range and
+  the hex cursor highlights the deepest containing field. 64-bit integers display hex with the
+  decimal value in the tooltip to keep columns readable.
+- Template validation (schema, duplicate sibling names, depth/array/field caps, file bounds) with
+  an explicit errors panel. Out-of-bounds fields are marked `not read` and explained; values are
+  never guessed.
+- Template editor dialog (JSON with Validate / Save / Apply), user templates in
+  `<data>/templates/*.json`, template loading from disk and a folder shortcut.
+- Built-in ELF64, ZIP local-header and PNG IHDR example templates, shipped both as editable files
+  in `templates/` and compiled into the app; equality between the two is tested.
+- `docs/STRUCTURE-TEMPLATES.md` and an offline in-app structure-template guide.
+- **Smart command center**: ranked search over commands (with shortcuts and descriptions), open
+  files, the analysis tab, settings-related commands, offline documentation topics and recent
+  actions, with arrow-key navigation and clear empty-state suggestions.
+- Offline help viewer with Getting started, Keyboard shortcuts, Structure templates and
+  Limitations topics, exposed through Help and the command center.
+
+### Changed
+
+- Version 0.5.0. `Ctrl+Shift+B` toggles the structure builder; Tools and Help menus gained the
+  template and documentation entries.
+- Recent actions are kept for the session (not persisted) and are clearly labelled as such.
+
+### Known limitations
+
+- Templates use a single base at offset 0 and static lengths; dynamic length/offset expressions,
+  unions and data-dependent arrays are not supported. They are layouts, not format detection.
+- Priorities 2–7 and 9–10 of the product brief (intelligence map, diff, learning mode, flow
+  explorer, reports, community hub, onboarding/auto-save, extended quality gates) are not built.
+
 ## [0.4.0] — 2026-11-16
 
 ### Added
