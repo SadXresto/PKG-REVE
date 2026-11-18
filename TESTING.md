@@ -37,8 +37,8 @@ RelWithDebInfo unless stated):
 
 | Check | Result |
 | --- | --- |
-| `ctest` / direct run | **89 tests in 25 suites, all passed**, ~1.5 s |
-| ASan + UBSan run (Debug) | **89/89 passed**, no reports |
+| `ctest` / direct run | **92 tests in 26 suites, all passed**, ~0.8 s |
+| ASan + UBSan run (Debug) | **92/92 passed**, no reports |
 | `--selftest` with 6 fixtures | PASS, 6 files analysed, exit code 0, RSS ≈ 44.6 MiB |
 | 8 GiB sparse file: mmap, tail read, row count, search | passed, elapsed below the 1 ms timer resolution, RSS growth ≈ 816 KiB |
 | 3000 random row reads on a 64 MiB file | passed in ~40 ms (test wall time) |
@@ -59,6 +59,7 @@ package and no Windows build have been measured yet.
 | Async save | `test_save.cpp` | pre-cancelled save creates nothing, mid-stream cancel leaves destination and temp files absent, monotonic progress to 100%, cancelled backup leaves source intact, backup byte-for-byte copy |
 | Structure templates | `test_structure.cpp` | nested struct arrays, per-field endianness, out-of-bounds error nodes, invalid definitions, built-ins against real ELF/ZIP samples, JSON round-trip, shipped template files match built-ins, broken template files reported |
 | Structure panel | `test_command.cpp` | tree population, tree selection offset/length signal, hex-to-tree highlight without feedback, visible validation diagnostics |
+| Structure form | `test_structure_form.cpp` | template loads into the form unchanged, nested add/replace/remove/move, missing name, missing length, duplicate sibling names, empty template |
 | Command center | `test_command.cpp` | title/category/description/keyword matching, multi-term queries, stable ordering, no-match handling, empty query preserves order |
 | Signatures | `test_signatures.cpp` | ELF/ZIP/PS4/Vita/PNG validation, embedded-match confidence, no false positives, MZ-only low confidence, analysis JSON + section integration |
 | Inspector data | `test_inspector.cpp` | endianness, signed values, binary/hex/ASCII formatting, float interpretation, empty input |

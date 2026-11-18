@@ -4,6 +4,32 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.5.1] — 2026-11-18
+
+### Added
+
+- **Form-based structure template editor**: add, edit, remove and reorder fields (name, type,
+  offset, length, byte order, array count and description) and build nested structs by adding a
+  struct and then using *Add nested field* inside it. Offsets accept decimal or `0x` notation;
+  names, lengths and numeric ranges are checked before anything is applied. Removing a struct
+  with children, or changing its type, asks first.
+- The template dialog now has a **Form** tab next to **JSON (advanced)** for the same template.
+  Switching tabs carries the layout across, so form work can be reviewed as JSON and
+  hand-written templates can be opened in the form. Invalid JSON keeps the user in the JSON tab
+  instead of discarding it.
+- Three widget tests: loading and rebuilding a template unchanged, nested
+  add/replace/remove/move operations, and actionable validation messages.
+
+### Changed
+
+- Version 0.5.1. New templates start from the two-field example in both tabs rather than only
+  in the JSON text.
+
+### Known limitations
+
+- Fields are reordered with *Move up* / *Move down*; drag-and-drop reordering is not implemented.
+  The form still uses static offsets and lengths: no dynamic expressions, unions or bitfields.
+
 ## [0.5.0] — 2026-11-17
 
 ### Added

@@ -81,10 +81,24 @@ verdict.
 
 ## Editing
 
-**Structure → Edit…** opens the template editor:
+**Structure → Edit…** opens the template editor with two tabs describing the
+same template:
 
-- **Validate** parses and evaluates against the current file, reporting schema
-  and bounds problems.
+- **Form** — build a layout without learning the schema: template name,
+  description and default byte order, plus a field tree with *Add field*,
+  *Add nested field*, *Edit*, *Remove*, *Move up* and *Move down*. The field
+  dialog covers name, type, offset, length (text/bytes only), a per-field byte
+  order override, array count and description.
+- **JSON (advanced)** — the schema above, for anything the form does not cover.
+  JSON remains the saved format, so the two views never diverge.
+
+Switching tabs carries the layout across. Invalid JSON is never thrown away: the
+dialog stays on the JSON tab and reports the error. To build a nested struct,
+add a field with type `struct`, select it and use *Add nested field*; child
+offsets are relative to that struct, not the file.
+
+- **Validate** parses the active tab and evaluates it against the current file,
+  reporting schema and bounds problems.
 - **Apply** shows the validated template in the tree without saving it.
 - **Save template…** writes indented JSON to the user template folder (default
   name derived from the template id) and reloads the list.
@@ -97,6 +111,8 @@ Session templates that are applied but not saved are labelled "Session template
 - Absolute base is always offset 0; there are no per-template start offsets yet.
 - Lengths and offsets are static values; expressions that reference other fields
   are not supported.
+- Drag-and-drop reordering is not available; fields move with *Move up* and
+  *Move down* in the form.
 - No unions/overlaps control (overlaps are allowed and coverage counts each byte
   once), no bitfields, no string encodings beyond ASCII/UTF-8, no conditionals.
 - Struct arrays must be homogeneous and fixed-size.

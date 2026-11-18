@@ -19,6 +19,7 @@ add_executable(pkgstudio_tests
     test_pkg_parsers.cpp
     test_signatures.cpp
     test_structure.cpp
+    test_structure_form.cpp
     test_command.cpp
     test_inspector.cpp
     test_hex_search.cpp

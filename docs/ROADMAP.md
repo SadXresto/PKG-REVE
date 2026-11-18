@@ -12,9 +12,10 @@ restore, recent files. Panels are resizable split views (not dockable floating w
 
 ## Product experience upgrade (2026-11-17)
 
-- Priority 1 — Visual binary structure builder: **done for declarative templates** (JSON schema,
-  nested structs, arrays, endianness, tree, hex sync, validation, built-ins, editor, docs).
-  Not implemented: drag/drop visual field editing, dynamic lengths/offsets, unions.
+- Priority 1 — Visual binary structure builder: **done for declarative templates** (JSON schema
+  with a form-based field editor and advanced JSON view, nested structs, arrays, endianness,
+  tree, hex sync, validation, built-ins, docs). Not implemented: drag-and-drop field reordering,
+  dynamic lengths/offsets, unions.
 - Priority 8 — Smart command center: **done** (commands with shortcuts/descriptions, open files,
   analysis, settings-related commands, offline documentation, recent actions, ranked search).
 - Priorities 2–7 and 9–10: **not started** in this session.

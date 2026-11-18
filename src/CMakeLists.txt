@@ -49,6 +49,7 @@ add_library(pkgstudio_app STATIC
     ui/RecentPanel.cpp
     ui/SearchPanel.cpp
     ui/SettingsDialog.cpp
+    ui/StructureFormEditor.cpp
     ui/StructurePanel.cpp
     ui/ThemeEditorDialog.cpp
     ui/WelcomePage.cpp

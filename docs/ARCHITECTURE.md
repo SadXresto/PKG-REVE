@@ -106,6 +106,10 @@ Rules every parser follows:
   `HexView`: `fieldSelected` scrolls/selects the hex range, while `HexView::cursorMoved` calls
   `highlightOffset`, which selects the deepest containing node with signals blocked to avoid a
   feedback loop. It refreshes after edits and after save/reload.
+- `StructureFormEditor` edits the same layout through a form: a field tree with add, edit,
+  remove and reorder, per-field type/offset/length/byte order/count, and nested structs. It
+  serialises back into the template JSON and validates through `StructureTemplate::fromJson`,
+  so both dialog tabs use one schema and one set of error messages.
 - Templates are explicitly labelled as interpretations. Only the parser/signature path can
   claim a format.
 

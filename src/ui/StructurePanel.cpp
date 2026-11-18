@@ -1,5 +1,7 @@
 #include "ui/StructurePanel.h"
 
+#include "ui/StructureFormEditor.h"
+
 #include "core/AtomicFile.h"
 #include "core/FormatUtil.h"
 
@@ -23,6 +25,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QTabWidget>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QUrl>
@@ -69,9 +72,22 @@ QString sanitizedFileName(const QString& id)
     return name + QStringLiteral(".json");
 }
 
-/// JSON template editor. Fields, offsets, lengths and types are edited in the
-/// documented template format; Validate checks the schema and structure without
-/// touching the file, Apply shows it in the tree, Save stores it for reuse.
+QString errorText(const Error& error)
+{
+    return error.detail.isEmpty() ? error.message : error.detail;
+}
+
+int countAllFields(const QVector<StructureField>& fields)
+{
+    int total = fields.size();
+    for (const StructureField& field : fields)
+        total += countAllFields(field.fields);
+    return total;
+}
+
+/// Template editor with a form for everyday use and the JSON view for advanced
+/// templates. Both edit the same documented schema; Validate, Apply and Save
+/// use the active tab and switching tabs carries the layout across.
 class TemplateEditor : public QDialog {
 public:
     TemplateEditor(QWidget* parent, const StructureTemplate* initial, const HexDocument* document,
@@ -79,36 +95,42 @@ public:
         : QDialog(parent), m_document(document), m_templatesDirectory(templatesDirectory)
     {
         setWindowTitle(QStringLiteral("Structure template editor"));
-        resize(760, 640);
+        resize(840, 720);
         setModal(true);
 
         auto* layout = new QVBoxLayout(this);
         layout->setContentsMargins(10, 10, 10, 10);
         layout->setSpacing(8);
 
-        auto* help = new QLabel(
-            QStringLiteral(
-                "Describe fields as JSON. Offsets are relative to the file (or to the parent "
-                "struct); types are u8/i8/u16/i16/u32/i32/u64/i64/f32/f64/ascii/utf8/bytes/"
-                "struct. Text and bytes need a length; add \"count\" for arrays and nested "
-                "\"fields\" for structs. Validation checks the schema and file bounds — it "
-                "cannot prove the file really uses this layout."),
-            this);
-        help->setWordWrap(true);
-        help->setObjectName(QStringLiteral("hintLabel"));
-        layout->addWidget(help);
+        m_tabs = new QTabWidget(this);
+        m_tabs->setObjectName(QStringLiteral("templateEditorTabs"));
 
-        m_editor = new QPlainTextEdit(this);
+        m_form = new StructureFormEditor(this);
+        m_tabs->addTab(m_form, QStringLiteral("Form"));
+
+        auto* jsonPage = new QWidget(this);
+        auto* jsonLayout = new QVBoxLayout(jsonPage);
+        jsonLayout->setContentsMargins(8, 8, 8, 8);
+        jsonLayout->setSpacing(6);
+        auto* jsonHint = new QLabel(
+            QStringLiteral("Advanced: the documented template schema. Offsets are relative to the "
+                           "file (or to the parent struct); types are u8/i8/u16/i16/u32/i32/u64/"
+                           "i64/f32/f64/ascii/utf8/bytes/struct. Text and bytes need a length. Use "
+                           "count for arrays and nested fields for structs."),
+            jsonPage);
+        jsonHint->setWordWrap(true);
+        jsonHint->setObjectName(QStringLiteral("hintLabel"));
+        jsonLayout->addWidget(jsonHint);
+
+        m_editor = new QPlainTextEdit(jsonPage);
         m_editor->setObjectName(QStringLiteral("templateEditor"));
         QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
         font.setPointSize(std::max(9, font.pointSize()));
         m_editor->setFont(font);
         m_editor->setTabStopDistance(4 * m_editor->fontMetrics().horizontalAdvance(QLatin1Char(' ')));
-        m_editor->setPlainText(initial != nullptr
-                                   ? QString::fromUtf8(QJsonDocument(initial->toJson())
-                                                           .toJson(QJsonDocument::Indented))
-                                   : starterJson());
-        layout->addWidget(m_editor, 1);
+        jsonLayout->addWidget(m_editor, 1);
+        m_tabs->addTab(jsonPage, QStringLiteral("JSON (advanced)"));
+        layout->addWidget(m_tabs, 1);
 
         m_status = new QLabel(this);
         m_status->setWordWrap(true);
@@ -120,7 +142,7 @@ public:
         connect(validateButton, &QPushButton::clicked, this, [this]() { validate(); });
         buttons->addWidget(validateButton);
 
-        auto* saveButton = new QPushButton(QStringLiteral("Save template\u2026"), this);
+        auto* saveButton = new QPushButton(QStringLiteral("Save template…"), this);
         connect(saveButton, &QPushButton::clicked, this, [this]() { save(); });
         buttons->addWidget(saveButton);
         buttons->addStretch(1);
@@ -139,70 +161,132 @@ public:
         buttons->addWidget(m_applyButton);
         layout->addLayout(buttons);
 
-        connect(m_editor, &QPlainTextEdit::textChanged, this, [this]() {
-            m_valid = false;
-            m_applyButton->setEnabled(false);
-            m_status->clear();
-        });
+        if (initial != nullptr) {
+            m_form->setTemplate(*initial);
+            writeJson(
+                QJsonDocument(initial->toJson()).toJson(QJsonDocument::Indented));
+        } else {
+            // Start from the same small example in both views so a beginner can
+            // edit real fields immediately and the JSON tab never disagrees.
+            const QJsonDocument starter =
+                QJsonDocument::fromJson(starterJson().toUtf8());
+            const auto parsed = StructureTemplate::fromJson(starter.object());
+            if (parsed)
+                m_form->setTemplate(parsed.value());
+            writeJson(starterJson().toUtf8());
+        }
+
+        connect(m_tabs, &QTabWidget::currentChanged, this,
+                [this](int index) { switchTab(index); });
+        connect(m_form, &StructureFormEditor::changed, this, [this]() { markEdited(); });
+        connect(m_editor, &QPlainTextEdit::textChanged, this, [this]() { markEdited(); });
     }
 
     [[nodiscard]] bool hasTemplate() const { return m_valid; }
     [[nodiscard]] StructureTemplate templateValue() const { return m_structure; }
     [[nodiscard]] bool savedToFile() const { return m_savedToFile; }
+    [[nodiscard]] QString savedPath() const { return m_savedPath; }
 
 private:
-    bool validate()
+    static constexpr int kJsonTab = 1;
+
+    void markEdited()
+    {
+        m_valid = false;
+        m_applyButton->setEnabled(false);
+        m_status->clear();
+    }
+
+    void writeJson(const QByteArray& json)
+    {
+        const QSignalBlocker blocker(m_editor);
+        m_editor->setPlainText(QString::fromUtf8(json));
+    }
+
+    void writeJsonFromForm()
+    {
+        writeJson(QJsonDocument(m_form->structure().toJson()).toJson(QJsonDocument::Indented));
+    }
+
+    [[nodiscard]] Result<StructureTemplate> parseJson() const
     {
         QJsonParseError error;
         const QJsonDocument document =
             QJsonDocument::fromJson(m_editor->toPlainText().toUtf8(), &error);
         if (error.error != QJsonParseError::NoError) {
-            m_status->setText(QStringLiteral("JSON error at offset %1: %2")
-                                  .arg(error.offset)
-                                  .arg(error.errorString()));
-            m_valid = false;
-            m_applyButton->setEnabled(false);
-            return false;
+            return makeError(QStringLiteral("JSON error"),
+                             QStringLiteral("JSON error at offset %1: %2")
+                                 .arg(error.offset)
+                                 .arg(error.errorString()));
         }
-        if (!document.isObject()) {
-            m_status->setText(QStringLiteral("The template must be a JSON object."));
-            m_valid = false;
-            m_applyButton->setEnabled(false);
-            return false;
-        }
-        auto parsed = StructureTemplate::fromJson(document.object());
-        if (!parsed) {
-            const QString detail = parsed.error().detail.isEmpty() ? parsed.error().message
-                                                                   : parsed.error().detail;
-            m_status->setText(detail);
-            m_valid = false;
-            m_applyButton->setEnabled(false);
-            return false;
-        }
+        if (!document.isObject())
+            return makeError(QStringLiteral("Invalid template"),
+                             QStringLiteral("The template must be a JSON object."));
+        return StructureTemplate::fromJson(document.object());
+    }
 
-        QString text = QStringLiteral("Valid template \"%1\" — %2 top-level field(s)"
-                                      ", default endianness %3.")
-                           .arg(parsed.value().name)
-                           .arg(parsed.value().fields.size())
-                           .arg(parsed.value().littleEndian ? QStringLiteral("little")
-                                                            : QStringLiteral("big"));
+    /// Switching tabs carries the current layout across. Invalid JSON keeps the
+    /// user in the JSON tab instead of silently replacing what they typed.
+    void switchTab(int index)
+    {
+        if (m_syncing)
+            return;
+        if (index == kJsonTab) {
+            writeJsonFromForm();
+            return;
+        }
+        const auto parsed = parseJson();
+        if (!parsed) {
+            m_status->setText(errorText(parsed.error()) +
+                              QStringLiteral(" Fix the JSON before switching to the form."));
+            m_syncing = true;
+            m_tabs->setCurrentIndex(kJsonTab);
+            m_syncing = false;
+            return;
+        }
+        m_form->setTemplate(parsed.value());
+    }
+
+    bool validate()
+    {
+        const bool fromJson = m_tabs->currentIndex() == kJsonTab;
+        const auto result = fromJson ? parseJson() : m_form->buildTemplate();
+        if (!result) {
+            m_status->setText(errorText(result.error()));
+            m_valid = false;
+            m_applyButton->setEnabled(false);
+            return false;
+        }
+        const StructureTemplate parsed = result.value();
+        if (fromJson)
+            m_form->setTemplate(parsed);
+        else
+            writeJsonFromForm();
+
+        QString text = QStringLiteral("Valid template '%1' — %2 top-level field(s), %3 field(s) "
+                                      "in total, default endianness %4.")
+                           .arg(parsed.name)
+                           .arg(parsed.fields.size())
+                           .arg(countAllFields(parsed.fields))
+                           .arg(parsed.littleEndian ? QStringLiteral("little")
+                                                    : QStringLiteral("big"));
         if (m_document != nullptr && m_document->isValid()) {
-            const auto evaluation = evaluateStructure(parsed.value(), *m_document);
+            const auto evaluation = evaluateStructure(parsed, *m_document);
             if (!evaluation) {
-                text += QStringLiteral("\n%1").arg(evaluation.error().message);
+                text += QStringLiteral(" ") + errorText(evaluation.error());
                 m_status->setText(text);
                 m_valid = false;
                 m_applyButton->setEnabled(false);
                 return false;
             }
             if (!evaluation.value().errors.isEmpty()) {
-                text += QStringLiteral("\n%1 field(s) fall outside the file; they will be "
-                                       "marked as errors in the tree.")
+                text += QStringLiteral(" %1 field(s) fall outside the file; they will be marked "
+                                       "as errors in the tree.")
                             .arg(evaluation.value().errors.size());
             }
         }
         m_status->setText(text);
-        m_structure = parsed.value();
+        m_structure = parsed;
         m_valid = true;
         m_applyButton->setEnabled(true);
         return true;
@@ -234,18 +318,17 @@ private:
         accept();
     }
 
-public:
-    [[nodiscard]] QString savedPath() const { return m_savedPath; }
-
-private:
     const HexDocument* m_document = nullptr;
     QString m_templatesDirectory;
+    QTabWidget* m_tabs = nullptr;
+    StructureFormEditor* m_form = nullptr;
     QPlainTextEdit* m_editor = nullptr;
     QLabel* m_status = nullptr;
     QPushButton* m_applyButton = nullptr;
     StructureTemplate m_structure;
     bool m_valid = false;
     bool m_savedToFile = false;
+    bool m_syncing = false;
     QString m_savedPath;
 };
 

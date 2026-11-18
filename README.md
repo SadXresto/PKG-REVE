@@ -6,7 +6,7 @@ runtime.
 
 ![PKG Studio with the dark theme](docs/screenshots/theme-dark.png)
 
-**Version 0.5.0.** This repository contains a real, running application: the VS Code-style
+**Version 0.5.1.** This repository contains a real, running application: the VS Code-style
 shell with the Void Black design system, the SQLite data layer, the format analysis core with
 signature confidence, and a hex workspace with a live byte inspector, signature overlay,
 same-length replace, opt-in editing, undo/redo and backup-on-save. Disassembly, debugging,
@@ -57,7 +57,7 @@ the honest status of every phase.
   selecting a field selects that byte range in the hex view (and vice versa). Out-of-bounds
   fields are obvious errors, never guessed values. Templates are explicitly labelled as
   interpretations, not format confirmation. Built-in ELF64/ZIP/PNG examples and a template
-  editor with validation are included.
+  editor with a form for fields plus an advanced JSON view are included.
 - **Smart command center** (`Ctrl+Shift+P`): fuzzy-ranked search across every command (with its
   current shortcut), open files, the analysis tab, settings-related commands, offline help
   topics and recently used actions. Arrow keys navigate without leaving the search field.
