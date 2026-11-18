@@ -37,3 +37,8 @@ Thumbs.db
 *.dll
 *.exe
 *.pdb
+
+# Demo packaging output and local verification captures
+dist/
+artifacts/
+.portable-home/

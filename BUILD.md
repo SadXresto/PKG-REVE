@@ -148,10 +148,24 @@ machine without a display, keep `QT_QPA_PLATFORM=offscreen` (set automatically b
 
 ## Packaging and installation
 
-**Not implemented.** There is no installer, uninstaller, portable ZIP target, code signing or
-updater. `cmake --install` rules are not provided either. Distribution packaging (CPack/NSIS,
-AppImage/deb, signed Windows builds) is future work; the application itself only needs its Qt
-runtime and the SQLite driver.
+Two demo packaging paths exist:
+
+- **Linux portable (verified in this environment).**
+  `scripts/build.sh && scripts/package-portable.sh` creates
+  `dist/PKGStudio-<version>-linux-x86_64/` and a `.tar.gz` containing the executable, the Qt
+  libraries and plugins, the SQLite driver, fonts and the synthetic samples. The script then
+  extracts the archive into a temporary folder and runs `--selftest` with `env -i` (fresh
+  `HOME`, minimal `PATH`), so the reported artifact has no dependency on the Qt SDK, CMake or
+  the repository. A desktop still provides the usual X11/glibc system libraries.
+- **Windows installer (pipeline provided, not built or tested here).**
+  `packaging/windows/build-installer.ps1` builds with MSVC, stages the executable, runs
+  `windeployqt`, verifies the Qt DLLs and `qsqlite.dll`, and invokes Inno Setup with
+  `packaging/windows/PKGStudio.iss`. This Linux environment has no MSVC, Windows Qt kit or
+  Windows host, so no Windows EXE was produced or installed. Complete the checklist in
+  `packaging/windows/README.md` on Windows before calling it tested.
+
+No code signing, updater, macOS package or `cmake --install` target is provided. Development
+builds are intentionally unsigned; Windows SmartScreen warnings are expected.
 
 ## Troubleshooting
 

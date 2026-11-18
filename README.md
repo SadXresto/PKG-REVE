@@ -6,7 +6,7 @@ runtime.
 
 ![PKG Studio with the dark theme](docs/screenshots/theme-dark.png)
 
-**Version 0.5.1.** This repository contains a real, running application: the VS Code-style
+**Version 0.6.0 (demo build).** This repository contains a real, running application: the VS Code-style
 shell with the Void Black design system, the SQLite data layer, the format analysis core with
 signature confidence, and a hex workspace with a live byte inspector, signature overlay,
 same-length replace, opt-in editing, undo/redo and backup-on-save. Disassembly, debugging,
@@ -97,6 +97,31 @@ the honest status of every phase.
   the registry and surfaced as errors.
 - Overflow-safe offset arithmetic, file-size validation before reads, bounded table parsing,
   clamped settings values, atomic file writes and rotating redacted logs.
+
+## Demo build and packaging
+
+This version is a **development demo build** (`0.6.0`): it is not code-signed, and
+**Help → Feature status** inside the application lists what is implemented, partial or
+experimental, and planned. The first screen includes synthetic ELF/APK samples and a sample
+project, works without the source tree, and **F1** opens the About screen with the version,
+build type, Qt version, data directory and sample location.
+
+Linux portable build, verified in this repository's environment:
+
+```bash
+scripts/build.sh
+scripts/package-portable.sh
+```
+
+This produces `dist/PKGStudio-<version>-linux-x86_64/` and a `.tar.gz` that bundle Qt, the
+SQLite driver, fonts and the samples. The script extracts the archive and runs the self-test
+with an empty environment, so the artifact does not need the development toolchain. Run it with
+`./run-pkgstudio.sh`.
+
+Windows: `packaging/windows/build-installer.ps1` stages an MSVC build, runs `windeployqt` and
+builds an Inno Setup installer (`PKGStudio.iss`). **No Windows EXE has been built or tested in
+this Linux environment**; the checklist in `packaging/windows/README.md` must pass on Windows
+before the installer can be called tested.
 
 ## Not implemented (do not expect them yet)
 

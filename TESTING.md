@@ -37,14 +37,21 @@ RelWithDebInfo unless stated):
 
 | Check | Result |
 | --- | --- |
-| `ctest` / direct run | **92 tests in 26 suites, all passed**, ~0.8 s |
-| ASan + UBSan run (Debug) | **92/92 passed**, no reports |
+| `ctest` / direct run | **94 tests in 27 suites, all passed**, ~0.8 s |
+| ASan + UBSan run (Debug) | **94/94 passed**, no reports |
 | `--selftest` with 6 fixtures | PASS, 6 files analysed, exit code 0, RSS ≈ 44.6 MiB |
 | 8 GiB sparse file: mmap, tail read, row count, search | passed, elapsed below the 1 ms timer resolution, RSS growth ≈ 816 KiB |
 | 3000 random row reads on a 64 MiB file | passed in ~40 ms (test wall time) |
 
 These numbers are for this environment only. No low-end Windows 10 hardware, no real console
 package and no Windows build have been measured yet.
+
+## Packaging verification
+
+| Artifact | Status |
+| --- | --- |
+| Linux portable folder + `.tar.gz` (`scripts/package-portable.sh`) | **verified**: extracted into a temporary folder and run with `env -i` (fresh `HOME`, system `PATH` only) using `--selftest`, plus offscreen screenshots of the Welcome and structure views. Qt, ICU, fontconfig, fonts, the SQLite plugin and the samples are bundled. |
+| Windows Inno Setup EXE (`packaging/windows/`) | **not built or tested**: this environment is Linux with no MSVC, Windows Qt kit or Windows host. Scripts and a required checklist are provided; do not publish it as tested until that checklist passes on Windows. |
 
 ## What the suite covers
 
@@ -60,6 +67,7 @@ package and no Windows build have been measured yet.
 | Structure templates | `test_structure.cpp` | nested struct arrays, per-field endianness, out-of-bounds error nodes, invalid definitions, built-ins against real ELF/ZIP samples, JSON round-trip, shipped template files match built-ins, broken template files reported |
 | Structure panel | `test_command.cpp` | tree population, tree selection offset/length signal, hex-to-tree highlight without feedback, visible validation diagnostics |
 | Structure form | `test_structure_form.cpp` | template loads into the form unchanged, nested add/replace/remove/move, missing name, missing length, duplicate sibling names, empty template |
+| Welcome page | `test_welcome.cpp` | development-build label, sample actions disabled when absent and enabled when installed, sample signals, empty recent-list explanation |
 | Command center | `test_command.cpp` | title/category/description/keyword matching, multi-term queries, stable ordering, no-match handling, empty query preserves order |
 | Signatures | `test_signatures.cpp` | ELF/ZIP/PS4/Vita/PNG validation, embedded-match confidence, no false positives, MZ-only low confidence, analysis JSON + section integration |
 | Inspector data | `test_inspector.cpp` | endianness, signed values, binary/hex/ASCII formatting, float interpretation, empty input |

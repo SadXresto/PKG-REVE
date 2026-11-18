@@ -148,10 +148,10 @@ int Application::run(const StartupOptions& options)
                        QStringLiteral("Could not open %1").arg(file));
     }
     const bool hasStartupContent = !options.files.isEmpty() || !options.projectPath.isEmpty();
-    if (!hasStartupContent && !options.screenshotPath.isEmpty()) {
-        // Show a populated workspace in documentation screenshots.
-        m_window->restoreSession();
-    } else if (!hasStartupContent) {
+    if (!hasStartupContent) {
+        // Only a plain launch restores the previous workspace. Explicit files or
+        // a project on the command line must not drag old tabs back in, which
+        // would confuse a demo or a screenshot run.
         m_window->restoreSession();
     }
 

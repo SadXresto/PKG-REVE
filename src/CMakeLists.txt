@@ -56,6 +56,8 @@ add_library(pkgstudio_app STATIC
 )
 target_link_libraries(pkgstudio_app
     PUBLIC pkgstudio_core Qt6::Widgets Qt6::Sql)
+target_compile_definitions(pkgstudio_app PRIVATE
+    PKGSTUDIO_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
 
 # ---------------------------------------------------------------------------
 # Executable

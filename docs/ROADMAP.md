@@ -20,6 +20,19 @@ restore, recent files. Panels are resizable split views (not dockable floating w
   analysis, settings-related commands, offline documentation, recent actions, ranked search).
 - Priorities 2–7 and 9–10: **not started** in this session.
 
+## Demo readiness (2026-11-18)
+
+- First-launch Welcome tab with a development-build identity, synthetic sample actions, demo
+  tips and an honest feature-status page: **done**. Sample buttons disable themselves with an
+  explanation when the samples are not installed.
+- About screen with version, build type, Qt, platform, data directory and sample location:
+  **done**. Feature status separates implemented, partial/experimental and planned work.
+- Sample workspace: `samples/README.md` tour plus File/Help entries for the sample files and
+  project. Samples remain synthetic and legally safe.
+- Linux portable packaging with bundled Qt/fonts/samples and an isolated `--selftest`:
+  **verified**. Windows Inno Setup pipeline: **provided but untested** (no Windows toolchain or
+  host in this environment).
+
 ## Phase 2 — Design system / Void Black: **done**
 
 Void Black default palette, Neon Hex, shared role tokens and component sheet, preferred

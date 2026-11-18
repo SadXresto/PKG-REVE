@@ -27,6 +27,9 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
          QStringLiteral("Open a file, read the analysis, edit bytes and inspect structures."),
          page(QStringLiteral("Getting started"),
               QStringLiteral(
+                  "<p><b>Start with a sample.</b> The Welcome tab has synthetic ELF, APK and "
+                  "sample-project buttons. Everything they show is generated for this project "
+                  "and contains no commercial content.</p>"
                   "<p><b>1. Open a file</b> with <i>File &rarr; Open file</i> (Ctrl+O) or drop it "
                   "on the window. Files are memory mapped, so large packages do not load into "
                   "RAM.</p>"
@@ -108,6 +111,46 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
                   "a ZIP local header and a PNG IHDR chunk. User templates are stored in the "
                   "application data folder under <code>templates/</code>; use "
                   "<i>Structure &rarr; Folder</i> to open it.</p>"))});
+
+    topics.append(
+        {QStringLiteral("help.featureStatus"), QStringLiteral("Feature status"),
+         QStringLiteral("Implemented, partial or experimental, and planned features."),
+         page(QStringLiteral("Feature status"),
+              QStringLiteral(
+                  "<p><b>PKG Studio is a development build.</b> This page is the honest "
+                  "feature list; a planned item is not a promise of a future release.</p>"
+                  "<h3>Working and tested</h3>"
+                  "<ul>"
+                  "<li>Format analysis for ELF, PE/COFF, ZIP/APK, PSP/PS Vita PKG and the PS4 "
+                  "PKG container header, with an explicit raw-byte fallback.</li>"
+                  "<li>Hex workspace: navigation, selection, copy, streaming search, live byte "
+                  "inspector, signature overlay and same-size replace.</li>"
+                  "<li>Opt-in byte editing with per-file undo/redo, timestamped backup, atomic "
+                  "write and cancellable background saving.</li>"
+                  "<li>Structure builder with form and JSON editing, validation, hex "
+                  "synchronisation and built-in examples.</li>"
+                  "<li>Command center, offline help, themes, settings, session restore and the "
+                  "synthetic sample workspace.</li>"
+                  "</ul>"
+                  "<h3>Partial or experimental</h3>"
+                  "<ul>"
+                  "<li>Editing replaces bytes of the same length; inserting or deleting bytes "
+                  "is not supported.</li>"
+                  "<li>ZIP/APK analysis lists the archive directory and detects the manifest; "
+                  "binary AndroidManifest.xml is not decoded.</li>"
+                  "<li>PSP/Vita and PS4 support covers documented header fields only. Payloads "
+                  "are not decrypted or extracted, and PS5 is not implemented.</li>"
+                  "<li>Structure templates are user layouts: validated for schema and file "
+                  "bounds, never proof that a file conforms to a format.</li>"
+                  "<li>Signature matches are documented patterns with a confidence note, not a "
+                  "malware or integrity verdict.</li>"
+                  "</ul>"
+                  "<h3>Planned, not present</h3>"
+                  "<ul>"
+                  "<li>Binary diff/navigation, disassembly, debugging, plugin runtime, AI "
+                  "assistant, code-signed installers, an updater and a Windows build verified "
+                  "in CI.</li>"
+                  "</ul>"))});
 
     topics.append(
         {QStringLiteral("help.limitations"), QStringLiteral("Limitations and honest scope"),

@@ -4,6 +4,43 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.6.0] — 2026-11-18
+
+### Added
+
+- **Demo-ready first launch**: the Welcome tab shows a development-build identity, a *Start
+  here* block with synthetic ELF and APK samples, a sample-project action, demo tips and a
+  *What works in this build?* button. Sample actions disable themselves with an explanation when
+  the files are not installed next to the application instead of failing later.
+- **Help → Feature status**: an offline page separating implemented and tested features, partial
+  or experimental behaviour and planned work.
+- **About screen**: version, explicit development-build label, build type, Qt version, platform,
+  data directory and sample location, with a detailed diagnostics section.
+- `samples/README.md`: what each synthetic file demonstrates, a five-minute demonstration script
+  and the honest limits.
+- File and Help menu entries for the sample file/project and feature status; sample opening
+  reveals the analysis tab when parsing finishes (including cache hits).
+- `scripts/package-portable.sh`: a self-contained Linux demo folder and `.tar.gz` bundling the
+  Qt runtime, SQLite driver, fonts and samples, verified by extracting it and running an isolated
+  `--selftest` with `env -i`.
+- `packaging/windows/`: MSVC build + `windeployqt` staging script, Inno Setup definition and a
+  required Windows verification checklist. **Not built or tested in the Linux development
+  environment.**
+
+### Changed
+
+- Version 0.6.0. The compiled build type is shown in About.
+- Launching with explicit files or a project no longer restores the previous session on top of
+  them; only a plain launch restores the workspace.
+- The Welcome page explains why the recent list is empty and points at the samples.
+
+### Known limitations
+
+- No Windows EXE was produced or installed here: the environment has no MSVC, Windows Qt kit or
+  Windows host. The Linux portable bundle is the verified artifact; the Windows checklist is
+  mandatory before publishing an installer.
+- The build is unsigned and the About dialog was not captured in an automated visual test.
+
 ## [0.5.1] — 2026-11-18
 
 ### Added

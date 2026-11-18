@@ -66,6 +66,10 @@
 
 #include <algorithm>
 
+#ifndef PKGSTUDIO_BUILD_TYPE
+#define PKGSTUDIO_BUILD_TYPE "unknown"
+#endif
+
 namespace pkg::ui {
 namespace {
 
@@ -90,6 +94,28 @@ QString preferredMonospaceFamily()
     for (const QString& family : preferred) {
         if (families.contains(family))
             return family;
+    }
+    return {};
+}
+
+/// Locates the bundled synthetic samples. The packaged build keeps them next
+/// to the executable; development builds run from build/src, so the parent
+/// folders are tried as well. PKGSTUDIO_SAMPLES_DIR overrides the search.
+QString findSamplesDirectory()
+{
+    QStringList candidates;
+    const QString override = qEnvironmentVariable("PKGSTUDIO_SAMPLES_DIR");
+    if (!override.isEmpty())
+        candidates << override;
+    const QDir applicationDirectory(QCoreApplication::applicationDirPath());
+    candidates << applicationDirectory.filePath(QStringLiteral("samples"))
+               << applicationDirectory.filePath(QStringLiteral("../samples"))
+               << applicationDirectory.filePath(QStringLiteral("../../samples"))
+               << QDir::current().filePath(QStringLiteral("samples"));
+    for (const QString& candidate : candidates) {
+        const QFileInfo marker(QDir(candidate).filePath(QStringLiteral("sample.elf")));
+        if (marker.isFile())
+            return QDir(candidate).absolutePath();
     }
     return {};
 }
@@ -251,6 +277,9 @@ void MainWindow::buildUi()
 
     m_welcome = new WelcomePage(m_editors);
     m_editors->addWelcome(m_welcome);
+    m_welcome->setDevelopmentBuild(QApplication::applicationVersion());
+    m_samplesPath = findSamplesDirectory();
+    m_welcome->setDemoSamples(!m_samplesPath.isEmpty(), m_samplesPath);
 
     connect(m_activity, &ActivityBar::activated, this, &MainWindow::switchSidebar);
     connect(m_explorer, &FileExplorer::fileActivated, this, [this](const QString& path) {
@@ -287,6 +316,12 @@ void MainWindow::buildUi()
     connect(m_welcome, &WelcomePage::newProjectRequested, this, [this]() {
         runCommand(QStringLiteral("file.newProject"));
     });
+    connect(m_welcome, &WelcomePage::sampleFileRequested, this,
+            [this](const QString& fileName) { openSampleFile(fileName); });
+    connect(m_welcome, &WelcomePage::sampleProjectRequested, this,
+            [this]() { openSampleProject(); });
+    connect(m_welcome, &WelcomePage::featureStatusRequested, this,
+            [this]() { showHelpTopic(QStringLiteral("help.featureStatus")); });
     connect(m_welcome, &WelcomePage::recentActivated, this,
             [this](const QString& path, const QString& kind) {
                 if (kind == QLatin1String("project"))
@@ -537,6 +572,17 @@ void MainWindow::buildCommands()
                helpCategory, QKeySequence(),
                [this]() { showHelpTopic(QStringLiteral("help.limitations")); });
 
+    const QString demoCategory = QStringLiteral("Demo");
+    addCommand(QStringLiteral("demo.openElf"), QStringLiteral("Open ELF sample"), demoCategory,
+               QKeySequence(), [this]() { openSampleFile(QStringLiteral("sample.elf")); });
+    addCommand(QStringLiteral("demo.openApk"), QStringLiteral("Open APK sample"), demoCategory,
+               QKeySequence(), [this]() { openSampleFile(QStringLiteral("sample.apk")); });
+    addCommand(QStringLiteral("demo.openProject"), QStringLiteral("Open sample project"),
+               demoCategory, QKeySequence(), [this]() { openSampleProject(); });
+    addCommand(QStringLiteral("help.featureStatus"), QStringLiteral("Feature status"),
+               helpCategory, QKeySequence(),
+               [this]() { showHelpTopic(QStringLiteral("help.featureStatus")); });
+
     const auto describe = [this](const QString& id, const QString& description,
                                  const QString& keywords = QString()) {
         m_commandDescriptions.insert(id, description);
@@ -641,6 +687,18 @@ void MainWindow::buildCommands()
     describe(QStringLiteral("help.limitations"),
              QStringLiteral("What is intentionally not supported or confirmed"),
              QStringLiteral("scope documentation honesty"));
+    describe(QStringLiteral("demo.openElf"),
+             QStringLiteral("Open the bundled synthetic ELF sample and its analysis"),
+             QStringLiteral("tour example demo walkthrough"));
+    describe(QStringLiteral("demo.openApk"),
+             QStringLiteral("Open the bundled synthetic APK sample and its analysis"),
+             QStringLiteral("tour example demo walkthrough zip"));
+    describe(QStringLiteral("demo.openProject"),
+             QStringLiteral("Open the bundled sample folder as a project"),
+             QStringLiteral("tour example demo workspace files"));
+    describe(QStringLiteral("help.featureStatus"),
+             QStringLiteral("Implemented, partial/experimental and planned features"),
+             QStringLiteral("experimental coming soon roadmap honesty"));
 }
 
 void MainWindow::recordRecentCommand(const QString& id)
@@ -666,6 +724,10 @@ void MainWindow::buildMenus()
     fileMenu->addAction(m_commands.value(QStringLiteral("file.newProject")));
     fileMenu->addAction(m_commands.value(QStringLiteral("file.openProject")));
     fileMenu->addAction(m_commands.value(QStringLiteral("file.openFile")));
+    fileMenu->addSeparator();
+    fileMenu->addAction(m_commands.value(QStringLiteral("demo.openElf")));
+    fileMenu->addAction(m_commands.value(QStringLiteral("demo.openApk")));
+    fileMenu->addAction(m_commands.value(QStringLiteral("demo.openProject")));
     fileMenu->addSeparator();
     fileMenu->addAction(m_commands.value(QStringLiteral("file.save")));
     fileMenu->addAction(m_commands.value(QStringLiteral("file.saveAs")));
@@ -732,6 +794,9 @@ void MainWindow::buildMenus()
     helpMenu->addSeparator();
     helpMenu->addAction(m_commands.value(QStringLiteral("help.formats")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.legal")));
+    helpMenu->addSeparator();
+    helpMenu->addAction(m_commands.value(QStringLiteral("demo.openProject")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.featureStatus")));
     helpMenu->addSeparator();
     helpMenu->addAction(m_commands.value(QStringLiteral("help.about")));
 }
@@ -1121,6 +1186,10 @@ void MainWindow::startAnalysis(FileEditor* editor, std::shared_ptr<HexDocument> 
             editor->setAnalysis(infoResult.value());
             m_output->setDiagnostics(infoResult.value().warnings, path);
             m_statusFormat->setText(infoResult.value().formatName);
+            if (editor == m_pendingAnalysisFocus) {
+                editor->showAnalysisTab();
+                m_pendingAnalysisFocus.clear();
+            }
             logInfo(QString::fromLatin1(kLogCategory),
                     QStringLiteral("Analysis cache hit for %1").arg(path));
             return;
@@ -1163,6 +1232,10 @@ void MainWindow::startAnalysis(FileEditor* editor, std::shared_ptr<HexDocument> 
                     m_output->setDiagnostics(package.warnings, path);
                     if (guard.data() == m_editors->currentEditor())
                         m_statusFormat->setText(package.formatName);
+                    if (guard.data() == m_pendingAnalysisFocus) {
+                        guard->showAnalysisTab();
+                        m_pendingAnalysisFocus.clear();
+                    }
 
                     const QByteArray payload =
                         QJsonDocument(package.toJson()).toJson(QJsonDocument::Compact);
@@ -1304,6 +1377,45 @@ void MainWindow::openProjectDialog()
         this, QStringLiteral("Open project folder"), m_lastDirectory);
     if (!directory.isEmpty())
         openProject(directory);
+}
+
+void MainWindow::openSampleFile(const QString& fileName)
+{
+    if (m_samplesPath.isEmpty()) {
+        QMessageBox::information(
+            this, QStringLiteral("Sample files not installed"),
+            QStringLiteral("The bundled synthetic samples were not found next to this build. "
+                           "Open any file you are authorized to inspect instead."));
+        return;
+    }
+    const QString path = QDir(m_samplesPath).filePath(fileName);
+    if (!QFileInfo(path).isFile()) {
+        QMessageBox::warning(this, QStringLiteral("Sample file missing"),
+                             QStringLiteral("Expected the sample at %1.").arg(path));
+        return;
+    }
+    if (!openFile(path))
+        return;
+    FileEditor* editor = currentEditor();
+    m_pendingAnalysisFocus = editor;
+    if (editor != nullptr && editor->hasAnalysis()) {
+        editor->showAnalysisTab();
+        m_pendingAnalysisFocus.clear();
+    }
+}
+
+void MainWindow::openSampleProject()
+{
+    if (m_samplesPath.isEmpty()) {
+        QMessageBox::information(
+            this, QStringLiteral("Sample files not installed"),
+            QStringLiteral("The bundled synthetic samples were not found next to this build. "
+                           "Open a project folder you are authorized to inspect instead."));
+        return;
+    }
+    openProject(m_samplesPath);
+    statusBar()->showMessage(QStringLiteral("Sample project opened: %1").arg(m_samplesPath),
+                             4000);
 }
 
 void MainWindow::showWelcome()
@@ -1776,20 +1888,34 @@ void MainWindow::showLegalNotice()
 
 void MainWindow::showAbout()
 {
+    QString buildType = QString::fromLatin1(PKGSTUDIO_BUILD_TYPE).trimmed();
+    if (buildType.isEmpty())
+        buildType = QStringLiteral("custom");
+    const QString samples =
+        m_samplesPath.isEmpty() ? QStringLiteral("not installed") : m_samplesPath;
     const QString text =
         QStringLiteral("<h3>PKG Studio %1</h3>"
+                       "<p><b>Development build</b> · %2 · Qt %3</p>"
                        "<p>Package analysis, metadata inspection and authorized binary "
-                       "development.</p>"
-                       "<p>Qt %2 \u00b7 C++20 \u00b7 %3</p>"
-                       "<p>This build covers the desktop shell, the format analysis core and "
-                       "the hex workspace with opt-in byte editing, undo/redo and backup-on-save. "
-                       "Disassembly, debugging and the plugin SDK are planned and not yet "
-                       "present.</p>")
-            .arg(QApplication::applicationVersion(), QString::fromLatin1(qVersion()),
-                 QSysInfo::prettyProductName());
+                       "development. This is a demonstration/evaluation build, not a signed "
+                       "release. Features listed as partial or planned under "
+                       "<i>Help → Feature status</i> are not complete.</p>"
+                       "<p>Working today: ELF/PE/ZIP/APK and PSP/Vita/PS4 header analysis, the "
+                       "hex view with live inspector and signature overlay, same-size byte "
+                       "editing with undo and safe saving, the structure builder (form and "
+                       "JSON), the command center and offline help.</p>")
+            .arg(QApplication::applicationVersion(), buildType, QString::fromLatin1(qVersion()));
     QMessageBox box(QMessageBox::Information, QStringLiteral("About PKG Studio"), text,
                     QMessageBox::Ok, this);
     box.setTextFormat(Qt::RichText);
+    box.setInformativeText(QStringLiteral("Platform: %1").arg(QSysInfo::prettyProductName()));
+    box.setDetailedText(QStringLiteral(
+                            "Build type: %1\nQt: %2\nPlatform: %3\nData directory: %4\n"
+                            "Sample files: %5\nLog file: %6\n\nNo telemetry. Nothing is "
+                            "uploaded.")
+                            .arg(buildType, QString::fromLatin1(qVersion()),
+                                 QSysInfo::prettyProductName(), Settings::dataDirectory(),
+                                 samples, Logger::instance().logFilePath()));
     box.exec();
 }
 

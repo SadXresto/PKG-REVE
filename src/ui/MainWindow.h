@@ -98,6 +98,8 @@ private:
     void applyEditorPreferences();
     void createProject();
     void openProjectDialog();
+    void openSampleFile(const QString& fileName);
+    void openSampleProject();
     void exportActiveReport();
     void exportLog();
     void saveActiveEditor(bool saveAs);
@@ -160,6 +162,8 @@ private:
 
     QString m_projectPath;
     QString m_lastDirectory;
+    QString m_samplesPath;
+    QPointer<FileEditor> m_pendingAnalysisFocus;
 };
 
 }  // namespace pkg::ui
