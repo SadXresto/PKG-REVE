@@ -8,6 +8,21 @@ versioning once a public release exists.
 
 ### Added
 
+- **Windows release workflow**: `.github/workflows/windows-release.yml` is a manual
+  (`workflow_dispatch`) pipeline on `windows-2022` that generates the demo samples, builds
+  the MSVC x64 app against Qt 6.8.3, stages the Qt runtime and plugins, bundles Microsoft's
+  signed Visual C++ redistributable (installed only when the runtime is missing), creates the
+  Inno Setup installer `PKG-Studio-Setup-x64.exe`, a portable ZIP
+  and `SHA256SUMS.txt`, installs and uninstalls the result, and uploads the installer, ZIP,
+  checksums and a pass/fail/untested report as the `PKG-Studio-Windows-x64` artifact. It can
+  optionally publish a GitHub Release. Never executed from the Linux development
+  environment, so the Windows artifact remains unverified.
+- **Windows install/uninstall checks**: `packaging/windows/smoke-test.ps1` now also verifies
+  the MSVC runtime, the Start Menu shortcut, the Add/Remove Programs entry, and that
+  uninstall removes the install folder, shortcut and registry entry.
+- **Release report**: `packaging/windows/make-release-report.ps1` produces
+  `dist/release-report.md` with separate passed, failed and *not tested* sections plus
+  artifact hashes, so unverified items are never reported as working.
 - **Windows CI**: `.github/workflows/windows-installer.yml` builds the MSVC x64 application,
   packages the Inno Setup installer and runs `packaging/windows/smoke-test.ps1`, which installs
   the EXE silently, runs `--selftest` on a bundled sample, captures the About and Feature status

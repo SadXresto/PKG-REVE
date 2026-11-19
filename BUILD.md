@@ -163,10 +163,15 @@ Two demo packaging paths exist:
   the repository. A desktop still provides the usual X11/glibc system libraries.
 - **Windows installer (pipeline provided, not built or tested here).**
   `packaging/windows/build-installer.ps1` builds with MSVC, stages the executable, runs
-  `windeployqt`, verifies the Qt DLLs and `qsqlite.dll`, and invokes Inno Setup with
-  `packaging/windows/PKGStudio.iss`. This Linux environment has no MSVC, Windows Qt kit or
-  Windows host, so no Windows EXE was produced or installed. Complete the checklist in
-  `packaging/windows/README.md` on Windows before calling it tested.
+  `windeployqt`, verifies the Qt DLLs, `qsqlite.dll` and `qwindows.dll`, bundles Microsoft's
+  signed Visual C++ redistributable (run by the installer only when the runtime is missing),
+  creates a portable ZIP plus `SHA256SUMS.txt`, and invokes Inno Setup with
+  `packaging/windows/PKGStudio.iss` to produce `PKG-Studio-Setup-x64.exe`.
+  `.github/workflows/windows-release.yml` runs this on `windows-2022` and then installs,
+  exercises and uninstalls the installed application. This Linux environment has no MSVC,
+  Windows Qt kit or Windows host, so no Windows EXE was produced or installed here;
+  complete the checklist in `packaging/windows/README.md` on Windows before calling it
+  tested.
 
 No code signing, updater, macOS package or `cmake --install` target is provided. Development
 builds are intentionally unsigned; Windows SmartScreen warnings are expected.

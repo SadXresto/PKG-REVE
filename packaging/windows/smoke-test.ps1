@@ -8,7 +8,9 @@
 #   - the bundled Qt runtime and SQLite driver are present,
 #   - --selftest starts, opens a bundled sample, analyses it and reports PASS,
 #   - the About and Feature status dialogs render to non-blank PNGs.
-# It finishes by uninstalling and writing dist\smoke\report.md.
+# It finishes by uninstalling, checking that the uninstaller removed the
+# install folder and its Add/Remove Programs entry, and writing
+# dist\smoke\report.md with one row per check.
 #
 # This proves the packaged runtime works on the Windows machine that ran it. It
 # does not sign or audit the build, and it is not a substitute for the manual
@@ -23,15 +25,24 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:Failed = $false
+$script:Passed = 0
+$script:FailCount = 0
 $report = New-Object System.Collections.Generic.List[string]
+
+# Inno Setup registers per-machine installs here; QA of the uninstaller needs
+# the same key name the installer used (AppId from packaging/windows/PKGStudio.iss).
+$UninstallKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{6A1E9B2C-7D34-4F0B-9E52-3C8A5D1F7B64}_is1"
+$ShortcutFolder = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\PKG Studio"
 
 function Add-Result {
     param([string]$Name, [bool]$Passed, [string]$Detail = "")
     $status = "FAIL"
     if ($Passed) {
         $status = "PASS"
+        $script:Passed++
     } else {
         $script:Failed = $true
+        $script:FailCount++
     }
     $script:report.Add("| $Name | $status | $Detail |")
     Write-Host "$status  $Name  $Detail"
@@ -114,6 +125,18 @@ foreach ($dll in @("Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll", "Qt6Sql.dll"))
     Add-Result "bundled $dll" (Test-Path (Join-Path $InstallDir $dll)) ""
 }
 Add-Result "bundled SQLite driver" (Test-Path (Join-Path $InstallDir "sqldrivers\qsqlite.dll")) ""
+# The installer runs Microsoft's vc_redist only when the machine lacks the
+# runtime, so the DLLs live in System32, not the install folder. They may also
+# pre-exist on the runner; this proves the dependency is satisfied, not that the
+# redistributable ran.
+$RuntimeOk = (Test-Path "$env:SystemRoot\System32\vcruntime140.dll") -and
+    (Test-Path "$env:SystemRoot\System32\msvcp140.dll")
+Add-Result "Visual C++ runtime available to the installed app" $RuntimeOk `
+    "$env:SystemRoot\System32 (bundled redistributable installs it when missing)"
+Add-Result "Start Menu group created" (Test-Path $ShortcutFolder) $ShortcutFolder
+Add-Result "Start Menu shortcut created" `
+    (Test-Path (Join-Path $ShortcutFolder "PKG Studio.lnk")) ""
+Add-Result "Add/Remove Programs entry created" (Test-Path $UninstallKey) $UninstallKey
 
 # An isolated data folder: the smoke test must not touch the runner's or the
 # tester's real PKG Studio settings. Prefer the offscreen platform when
@@ -148,8 +171,18 @@ if ($uninstaller) {
     while ((Test-Path $Exe) -and ((Get-Date) -lt $deadline)) {
         Start-Sleep -Milliseconds 500
     }
+    $folderDeadline = (Get-Date).AddSeconds(30)
+    while ((Test-Path $InstallDir) -and ((Get-Date) -lt $folderDeadline)) {
+        Start-Sleep -Milliseconds 500
+    }
     Add-Result "uninstall removed the executable" (-not (Test-Path $Exe)) `
         "uninstaller exit $($uninstall.ExitCode)"
+    Add-Result "uninstall removed the install folder" (-not (Test-Path $InstallDir)) `
+        $InstallDir
+    Add-Result "uninstall removed the Add/Remove Programs entry" `
+        (-not (Test-Path $UninstallKey)) $UninstallKey
+    Add-Result "uninstall removed the Start Menu shortcut" `
+        (-not (Test-Path (Join-Path $ShortcutFolder "PKG Studio.lnk"))) ""
 } else {
     Add-Result "uninstaller present" $false "no unins*.exe in $InstallDir"
 }
@@ -161,12 +194,20 @@ $lines.Add("")
 $lines.Add("- Installer: ``$SetupPath``")
 $lines.Add("- Install folder: ``$InstallDir``")
 $lines.Add("- Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+$lines.Add("- Runner OS: $([System.Environment]::OSVersion.VersionString)")
+$lines.Add("")
+$lines.Add("Summary: $($script:Passed) passed, $($script:FailCount) failed.")
 $lines.Add("")
 $lines.Add("| Check | Result | Detail |")
 $lines.Add("| --- | --- | --- |")
 foreach ($entry in $report) {
     $lines.Add($entry)
 }
+$lines.Add("")
+$lines.Add("Not covered by this run: code signing/SmartScreen, an interactive")
+$lines.Add("walkthrough under a real desktop session, Windows 10 (the runner is a")
+$lines.Add("Server image), upgrade over an older install, and retention of")
+$lines.Add("``%APPDATA%\\PKGStudio`` user data. See packaging/windows/README.md.")
 $lines | Set-Content -Path $reportPath -Encoding utf8
 
 Write-Host ""

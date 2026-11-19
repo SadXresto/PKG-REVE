@@ -69,7 +69,7 @@ package and no Windows build have been measured yet.
 | Artifact | Status |
 | --- | --- |
 | Linux portable folder + `.tar.gz` (`scripts/package-portable.sh`) | **verified**: extracted into a temporary folder and run with `env -i` (fresh `HOME`, system `PATH` only) using `--selftest`, plus offscreen screenshots of the Welcome and structure views. Qt, ICU, fontconfig, fonts, the SQLite plugin and the samples are bundled. |
-| Windows Inno Setup EXE (`packaging/windows/`) | **not built or tested**: this environment is Linux with no MSVC, Windows Qt kit or Windows host. A CI workflow (`.github/workflows/windows-installer.yml`) builds it on `windows-2022` and runs `packaging/windows/smoke-test.ps1`, but that workflow has not been executed from here. Do not publish the EXE as tested until a CI run is green and the checklist on a clean Windows VM is recorded. |
+| Windows x64 installer (`packaging/windows/`) | **not built or tested**: this environment is Linux with no MSVC, Windows Qt kit, Wine or Windows host. `.github/workflows/windows-release.yml` (manual dispatch) builds `PKG-Studio-Setup-x64.exe` on `windows-2022`, installs it, runs the installed application's self-test and dialog captures, uninstalls it, and writes a passed/failed/untested report. That workflow has never been executed from here, so no Windows artifact is claimed as working. Do not publish the EXE as tested until a workflow run is green and `packaging/windows/README.md`'s manual checklist is recorded. |
 
 ## What the suite covers
 
@@ -121,8 +121,9 @@ Each of these was found during development and has a test now:
   driven by automated tests; their logic is covered at the document level.
 - No libFuzzer/AFL harness. The recommended next step is a small `LLVMFuzzerTestOneInput` wrapper
   calling `ParserRegistry::analyze` on a temp file, with the fixtures as seed corpus.
-- The Windows CI workflow and installed-application smoke script exist but have not been run in
-  this Linux environment; no installer has been produced or installed-tested here yet.
+- The Windows workflows and installed-application smoke script exist but have not been run in
+  this Linux environment; no installer has been produced or installed-tested here yet. The
+  Windows scripts are only syntax-checked (PowerShell parser), not executed.
 - No dependency-audit automation in this repository.
 - Large-file tests use sparse files; they prove layout/streaming behaviour, not sustained I/O on
   a fragmented HDD.

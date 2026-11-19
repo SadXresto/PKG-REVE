@@ -1,0 +1,165 @@
+name: Windows release
+
+# Builds the PKG Studio Windows x64 installer on a real Windows runner, installs
+# it, exercises the installed application (self-test + dialog rendering),
+# uninstalls it, and publishes the artifacts:
+#
+#   PKG-Studio-Setup-x64.exe      Inno Setup installer
+#   PKGStudio-<version>-win64.zip portable copy of the same staged folder
+#   SHA256SUMS.txt                SHA-256 of both files
+#   release-report.md             passed / failed / NOT tested, per check
+#
+# Run it from the Actions tab (Run workflow). Set "publish_release" to also
+# attach the artifacts to a GitHub Release with the given tag.
+#
+# Only checks that the runner actually executed are reported as passed. Code
+# signing, SmartScreen, interactive feature clicking and Windows 10 itself are
+# listed as untested in the report.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Create a GitHub Release with the installer and ZIP"
+        type: boolean
+        default: false
+      release_tag:
+        description: "Release tag (leave empty for v<version>-windows)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+
+env:
+  QT_VERSION: "6.8.3"
+  SETUP_NAME: "PKG-Studio-Setup-x64"
+
+jobs:
+  windows-installer:
+    name: Build, install and smoke test
+    runs-on: windows-2022
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version, commit and release tag
+        id: meta
+        shell: pwsh
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          $match = Select-String -Path CMakeLists.txt -Pattern '^\s*VERSION ([0-9]+\.[0-9]+\.[0-9]+)'
+          if (-not $match) { throw "Could not read the version from CMakeLists.txt" }
+          $version = $match.Matches[0].Groups[1].Value
+          $tag = $env:RELEASE_TAG_INPUT
+          if (-not $tag) { $tag = "v$version-windows" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "commit=$($env:GITHUB_SHA.Substring(0, 7))" >> $env:GITHUB_OUTPUT
+          Write-Host "Version $version, tag $tag, commit $($env:GITHUB_SHA)"
+
+      - name: Generate the synthetic demo samples
+        shell: pwsh
+        run: |
+          python tools/make_test_packages.py samples
+          if ($LASTEXITCODE -ne 0) { throw "Sample generation failed" }
+          if (-not (Test-Path samples/sample.elf)) { throw "samples/sample.elf was not generated" }
+          Get-ChildItem samples | Select-Object Name, Length
+
+      - name: Set up the MSVC x64 environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Qt ${{ env.QT_VERSION }} (MSVC 2022 x64)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = Get-ChildItem "C:\Program Files (x86)\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $iscc) { throw "Inno Setup 6 (ISCC.exe) is not installed" }
+          Write-Host "Using $($iscc.FullName)"
+          $iscc.DirectoryName >> $env:GITHUB_PATH
+
+      - name: Build the app, stage Qt, create installer and portable ZIP
+        shell: pwsh
+        run: |
+          ./packaging/windows/build-installer.ps1 `
+            -QtDir $env:QT_ROOT_DIR `
+            -SetupBaseName "$env:SETUP_NAME"
+          if (-not (Test-Path "dist/$env:SETUP_NAME.exe")) {
+            throw "dist/$env:SETUP_NAME.exe was not produced"
+          }
+
+      - name: Install, run and uninstall the packaged application
+        shell: pwsh
+        run: |
+          ./packaging/windows/smoke-test.ps1 `
+            -Setup "dist/$env:SETUP_NAME.exe" `
+            -ReportDir "dist/smoke"
+
+      - name: Compose the pass/fail/untested report
+        if: always()
+        shell: pwsh
+        run: |
+          $portable = ""
+          $candidate = Get-ChildItem "dist/PKGStudio-*-win64.zip" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($candidate) { $portable = $candidate.FullName }
+          ./packaging/windows/make-release-report.ps1 `
+            -SmokeReport "dist/smoke/report.md" `
+            -Installer "dist/$env:SETUP_NAME.exe" `
+            -PortableZip $portable `
+            -Checksums "dist/SHA256SUMS.txt" `
+            -Output "dist/release-report.md" `
+            -Version "${{ steps.meta.outputs.version }}" `
+            -Commit "${{ steps.meta.outputs.commit }}" `
+            -QtVersion "$env:QT_VERSION" `
+            -Runner "${{ runner.os }} ${{ runner.arch }} (windows-2022)"
+          Get-Content "dist/release-report.md" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload installer, portable ZIP, checksums and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PKG-Studio-Windows-x64
+          path: |
+            dist/${{ env.SETUP_NAME }}.exe
+            dist/PKGStudio-*-win64.zip
+            dist/SHA256SUMS.txt
+            dist/release-report.md
+            dist/smoke/**
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish a GitHub Release
+        if: success() && inputs.publish_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: PKG Studio ${{ steps.meta.outputs.version }} (Windows x64)
+          body_path: dist/release-report.md
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            dist/${{ env.SETUP_NAME }}.exe
+            dist/PKGStudio-${{ steps.meta.outputs.version }}-win64.zip
+            dist/SHA256SUMS.txt
+            dist/release-report.md

@@ -118,16 +118,18 @@ SQLite driver, fonts and the samples. The script extracts the archive and runs t
 with an empty environment, so the artifact does not need the development toolchain. Run it with
 `./run-pkgstudio.sh`.
 
-Windows: `packaging/windows/build-installer.ps1` stages an MSVC build, runs `windeployqt` and
-builds an Inno Setup installer (`PKGStudio.iss`). **No Windows EXE has been built or tested in
-this Linux environment**; the checklist in `packaging/windows/README.md` must pass on Windows
-before the installer can be called tested.
+Windows: `.github/workflows/windows-release.yml` builds `PKG-Studio-Setup-x64.exe` on a
+`windows-2022` runner (MSVC, Qt 6.8.3, `windeployqt`, Inno Setup), installs it, runs the
+installed application's self-test and dialog captures, uninstalls it, and uploads the
+installer, portable ZIP, SHA-256 checksums and a pass/fail/untested report. Trigger it
+manually from **Actions → Windows release**. No Windows EXE has been built or tested in
+this Linux environment yet; the checklist in `packaging/windows/README.md` still applies.
 
 ## Not implemented (do not expect them yet)
 
 Disassembler / Capstone integration, LLDB debugging, AI Studio, plugin runtime, the modding
-studio workflows (diffs, patch history, validation), license manager, installer/uninstaller,
-PS5 PKG support, content extraction, and any DRM or console-security bypass. Hex editing cannot
+studio workflows (diffs, patch history, validation), license manager, code signing and an
+auto-updater, PS5 PKG support, content extraction, and any DRM or console-security bypass. Hex editing cannot
 insert or delete bytes yet. The Developer Console workspace currently exists only as the
 Output/Diagnostics panel — there is no interactive integrated terminal. Panels are resizable
 split views, not freely dockable windows.
