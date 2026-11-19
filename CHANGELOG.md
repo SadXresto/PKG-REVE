@@ -4,6 +4,27 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [Unreleased]
+
+### Added
+
+- **Windows CI**: `.github/workflows/windows-installer.yml` builds the MSVC x64 application,
+  packages the Inno Setup installer and runs `packaging/windows/smoke-test.ps1`, which installs
+  the EXE silently, runs `--selftest` on a bundled sample, captures the About and Feature status
+  dialogs, verifies the PNGs and uninstalls. Installer and smoke report are uploaded as
+  artifacts. The workflow has not been run from this Linux environment.
+- **Dialog capture**: `--screenshot-dialog about|feature-status` (with `--screenshot <path>`)
+  renders either dialog headlessly and fails with exit code 2 if it stays blank, so CI and
+  documentation can prove the two explanation dialogs actually render. The About box moved into
+  `ui/AboutDialog.*` so it can be built without a main window.
+- `tests/test_dialogs.cpp` covers the About and Feature status contents and asserts that both
+  dialogs render to non-blank images.
+
+### Changed
+
+- Help dialogs are built by `HelpDialog::createTopicDialog` and shown by `showTopic`, so the
+  same construction path is used interactively, by tests and by the diagnostics CLI.
+
 ## [0.6.0] — 2026-11-18
 
 ### Added

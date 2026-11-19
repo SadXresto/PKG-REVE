@@ -62,6 +62,7 @@ public:
     void saveSession();
 
     [[nodiscard]] QString projectPath() const { return m_projectPath; }
+    [[nodiscard]] QString samplesPath() const { return m_samplesPath; }
     [[nodiscard]] int openFileCount() const;
     [[nodiscard]] bool allEditorsAnalyzed() const;
     [[nodiscard]] int activeAnalysisCount() const { return m_activeAnalyses; }

@@ -130,6 +130,10 @@ See [TESTING.md](TESTING.md) for coverage and measured results.
 
 ./build/src/PKGStudio --screenshot out.png --screenshot-tab analysis -p samples \
     -f samples/sample_ps4.pkg
+
+# capture the About or Feature status dialog instead of the main window
+./build/src/PKGStudio --screenshot about.png --screenshot-dialog about
+./build/src/PKGStudio --screenshot status.png --screenshot-dialog feature-status
 ```
 
 Both modes run the real startup path (database, settings, parsers, theme, widgets). On a

@@ -22,6 +22,7 @@ add_executable(pkgstudio_tests
     test_structure_form.cpp
     test_command.cpp
     test_welcome.cpp
+    test_dialogs.cpp
     test_inspector.cpp
     test_hex_search.cpp
     test_replace.cpp

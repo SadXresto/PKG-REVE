@@ -34,9 +34,11 @@ add_library(pkgstudio_app STATIC
     data/Settings.cpp
     data/Theme.cpp
     data/ThemeManager.cpp
+    ui/AboutDialog.cpp
     ui/ActivityBar.cpp
     ui/ByteInspector.cpp
     ui/CommandPalette.cpp
+    ui/DialogCapture.cpp
     ui/EditorArea.cpp
     ui/FileEditor.cpp
     ui/FileExplorer.cpp

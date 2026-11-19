@@ -90,6 +90,10 @@ $SqliteDriver = Join-Path $Stage "sqldrivers/qsqlite.dll"
 if (-not (Test-Path $SqliteDriver)) {
     throw "Missing sqldrivers/qsqlite.dll after windeployqt; saving and settings would fail."
 }
+$PlatformPlugin = Join-Path $Stage "platforms/qwindows.dll"
+if (-not (Test-Path $PlatformPlugin)) {
+    throw "Missing platforms/qwindows.dll after windeployqt; the application would not start."
+}
 
 $IsccPath = $null
 $IsccCommand = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue

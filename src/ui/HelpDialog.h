@@ -3,6 +3,7 @@
 #include <QString>
 #include <QVector>
 
+class QDialog;
 class QWidget;
 
 namespace pkg::ui {
@@ -20,6 +21,10 @@ public:
     };
 
     [[nodiscard]] static QVector<Topic> topics();
+    /// Builds a topic window without showing it, for tests and the
+    /// --screenshot-dialog diagnostic mode. Returns nullptr for unknown ids;
+    /// the caller owns the result and it is parented to `parent`.
+    [[nodiscard]] static QDialog* createTopicDialog(QWidget* parent, const QString& id);
     [[nodiscard]] static bool showTopic(QWidget* parent, const QString& id);
 };
 

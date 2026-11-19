@@ -21,6 +21,9 @@ struct StartupOptions {
     QString themeId;
     QString screenshotPath;
     QString screenshotTab;
+    /// With --screenshot: capture a dialog instead of the main window
+    /// ("about" or "feature-status").
+    QString screenshotDialog;
     bool selfTest = false;
 };
 

@@ -7,6 +7,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <memory>
 
 namespace pkg::ui {
 namespace {
@@ -175,33 +176,42 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
     return topics;
 }
 
-bool HelpDialog::showTopic(QWidget* parent, const QString& id)
+QDialog* HelpDialog::createTopicDialog(QWidget* parent, const QString& id)
 {
     const QVector<Topic> available = topics();
     const auto topic = std::find_if(available.begin(), available.end(),
                                     [&id](const Topic& entry) { return entry.id == id; });
     if (topic == available.end())
-        return false;
+        return nullptr;
 
-    QDialog dialog(parent);
-    dialog.setWindowTitle(QStringLiteral("PKG Studio help \u2014 %1").arg(topic->title));
-    dialog.resize(680, 560);
-    dialog.setModal(true);
-    auto* layout = new QVBoxLayout(&dialog);
+    auto* dialog = new QDialog(parent);
+    dialog->setObjectName(QStringLiteral("helpTopicDialog"));
+    dialog->setWindowTitle(QStringLiteral("PKG Studio help \u2014 %1").arg(topic->title));
+    dialog->resize(680, 560);
+    auto* layout = new QVBoxLayout(dialog);
     layout->setContentsMargins(8, 8, 8, 8);
 
-    auto* browser = new QTextBrowser(&dialog);
+    auto* browser = new QTextBrowser(dialog);
+    browser->setObjectName(QStringLiteral("helpTopicBrowser"));
     browser->setOpenExternalLinks(false);
     browser->setHtml(
         QStringLiteral("<html><body style='font-family: sans-serif;'>%1</body></html>")
             .arg(topic->html));
     layout->addWidget(browser, 1);
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    QObject::connect(buttons, &QDialogButtonBox::clicked, &dialog, &QDialog::accept);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    QObject::connect(buttons, &QDialogButtonBox::clicked, dialog, &QDialog::accept);
     layout->addWidget(buttons);
-    dialog.exec();
+    return dialog;
+}
+
+bool HelpDialog::showTopic(QWidget* parent, const QString& id)
+{
+    std::unique_ptr<QDialog> dialog(createTopicDialog(parent, id));
+    if (!dialog)
+        return false;
+    dialog->exec();
     return true;
 }
 

@@ -10,16 +10,39 @@ This folder contains the Windows build and installer pipeline for PKG Studio:
   option. User settings stay in `%APPDATA%\PKGStudio` and are not touched by
   uninstall.
 
-## Status: not built or tested in this environment
+## Status: CI pipeline added, not yet observed running
 
 The development environment for this repository is Linux. It has no MSVC,
 MinGW, Windows Qt kit or Windows machine, so **no Windows EXE was produced or
-tested here**. The scripts encode the intended supported path; treat them as
-untested until someone runs the checklist below on Windows.
+tested here**. `.github/workflows/windows-installer.yml` builds the installer on
+`windows-2022`, installs it and runs `smoke-test.ps1` (self-test plus dialog
+screenshots); that workflow has not been executed from this environment, so the
+Windows artifact still counts as unverified until a run is green and the manual
+checklist below is recorded on a clean Windows VM.
 
 A Windows-only release cannot be declared demo-ready from a Linux-only test
 run. The tested portable build for this repository is the Linux folder created
 by `scripts/package-portable.sh`.
+
+## Automated smoke test
+
+`smoke-test.ps1` installs the setup EXE into a scratch folder and verifies the
+installed application, not the development build:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging/windows/smoke-test.ps1 `
+    -Setup dist\PKGStudio-0.6.0-setup.exe
+```
+
+It checks the bundled Qt/SQLite runtime, runs `--selftest` on
+`samples\sample.elf` (expects exit code 0 and `result: PASS`), captures the
+About and Feature status dialogs with `--screenshot-dialog` and rejects blank or
+tiny PNGs, uninstalls, and writes `dist\smoke\report.md` with one row per check.
+It exits non-zero if any check fails. Run it elevated, because the installer
+requires admin rights.
+
+CI runs the same script after building the installer; the installer and
+`dist\smoke\*\*` are uploaded as the `PKGStudio-windows-installer` artifact.
 
 ## Prerequisites
 

@@ -15,8 +15,25 @@ Or run the binary directly for GoogleTest filters and detailed output:
 ./build/tests/pkgstudio_tests --gtest_filter='FuzzTest.*'
 ```
 
-The suite uses a `QCoreApplication` (no display needed) and isolates its data with
+The suite uses a `QApplication` on the headless `offscreen` platform and isolates its data with
 `PKGSTUDIO_DATA_DIR=.testdata/<name>`; it never touches the user's real settings or database.
+
+## About and Feature status dialogs
+
+The two dialogs that explain the build can be captured without clicking through the UI:
+
+```bash
+QT_QPA_PLATFORM=offscreen ./build/src/PKGStudio \
+    --screenshot artifacts/dialog-about.png --screenshot-dialog about
+QT_QPA_PLATFORM=offscreen ./build/src/PKGStudio \
+    --screenshot artifacts/dialog-feature-status.png --screenshot-dialog feature-status
+```
+
+The command exits 0 only when the dialog became visible and rendered a non-blank image, and
+writes the PNG passed to `--screenshot`; exit code 2 means blank, invisible, unknown dialog id
+or a failed write. `tests/test_dialogs.cpp` asserts the same contents (version, development-build
+label, data directory, the three feature-status sections) and renders both dialogs through the
+same helper. The Windows smoke test repeats the capture against the installed EXE.
 
 Sanitizer build:
 
@@ -37,8 +54,9 @@ RelWithDebInfo unless stated):
 
 | Check | Result |
 | --- | --- |
-| `ctest` / direct run | **94 tests in 27 suites, all passed**, ~0.8 s |
-| ASan + UBSan run (Debug) | **94/94 passed**, no reports |
+| `ctest` / direct run | **100 tests in 30 suites, all passed**, ~1.1 s |
+| ASan + UBSan run (Debug) | **100/100 passed**, no reports, ~1.8 s |
+| `--screenshot-dialog about` / `feature-status` | captured **458×280** and **680×560** PNGs, exit code 0; an unknown dialog id exits with code 2 and writes nothing |
 | `--selftest` with 6 fixtures | PASS, 6 files analysed, exit code 0, RSS ≈ 44.6 MiB |
 | 8 GiB sparse file: mmap, tail read, row count, search | passed, elapsed below the 1 ms timer resolution, RSS growth ≈ 816 KiB |
 | 3000 random row reads on a 64 MiB file | passed in ~40 ms (test wall time) |
@@ -51,7 +69,7 @@ package and no Windows build have been measured yet.
 | Artifact | Status |
 | --- | --- |
 | Linux portable folder + `.tar.gz` (`scripts/package-portable.sh`) | **verified**: extracted into a temporary folder and run with `env -i` (fresh `HOME`, system `PATH` only) using `--selftest`, plus offscreen screenshots of the Welcome and structure views. Qt, ICU, fontconfig, fonts, the SQLite plugin and the samples are bundled. |
-| Windows Inno Setup EXE (`packaging/windows/`) | **not built or tested**: this environment is Linux with no MSVC, Windows Qt kit or Windows host. Scripts and a required checklist are provided; do not publish it as tested until that checklist passes on Windows. |
+| Windows Inno Setup EXE (`packaging/windows/`) | **not built or tested**: this environment is Linux with no MSVC, Windows Qt kit or Windows host. A CI workflow (`.github/workflows/windows-installer.yml`) builds it on `windows-2022` and runs `packaging/windows/smoke-test.ps1`, but that workflow has not been executed from here. Do not publish the EXE as tested until a CI run is green and the checklist on a clean Windows VM is recorded. |
 
 ## What the suite covers
 
@@ -68,6 +86,7 @@ package and no Windows build have been measured yet.
 | Structure panel | `test_command.cpp` | tree population, tree selection offset/length signal, hex-to-tree highlight without feedback, visible validation diagnostics |
 | Structure form | `test_structure_form.cpp` | template loads into the form unchanged, nested add/replace/remove/move, missing name, missing length, duplicate sibling names, empty template |
 | Welcome page | `test_welcome.cpp` | development-build label, sample actions disabled when absent and enabled when installed, sample signals, empty recent-list explanation |
+| Build dialogs | `test_dialogs.cpp` | About version/build/data locations, sample path and "not installed" fallback, Feature status sections, unknown topic rejected, both dialogs render to non-blank PNGs, missing dialog/empty path rejected |
 | Command center | `test_command.cpp` | title/category/description/keyword matching, multi-term queries, stable ordering, no-match handling, empty query preserves order |
 | Signatures | `test_signatures.cpp` | ELF/ZIP/PS4/Vita/PNG validation, embedded-match confidence, no false positives, MZ-only low confidence, analysis JSON + section integration |
 | Inspector data | `test_inspector.cpp` | endianness, signed values, binary/hex/ASCII formatting, float interpretation, empty input |
@@ -102,7 +121,9 @@ Each of these was found during development and has a test now:
   driven by automated tests; their logic is covered at the document level.
 - No libFuzzer/AFL harness. The recommended next step is a small `LLVMFuzzerTestOneInput` wrapper
   calling `ParserRegistry::analyze` on a temp file, with the fixtures as seed corpus.
-- No Windows CI, no installer test, no dependency-audit automation in this repository.
+- The Windows CI workflow and installed-application smoke script exist but have not been run in
+  this Linux environment; no installer has been produced or installed-tested here yet.
+- No dependency-audit automation in this repository.
 - Large-file tests use sparse files; they prove layout/streaming behaviour, not sustained I/O on
   a fragmented HDD.
 - No memory-consumption cap test beyond RSS growth assertions.

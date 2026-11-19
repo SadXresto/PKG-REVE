@@ -167,9 +167,11 @@ details, Windows instructions and all CMake options.
 Generate the synthetic test corpus with `python3 tools/make_test_packages.py`. The samples are
 self-created fixtures, not commercial packages.
 
-Diagnostic CLI options: `--screenshot <path>` (render the window and exit) and
-`--screenshot-tab hex|analysis`. These exist so the same startup path can be verified headlessly
-and are also what produced the images in `docs/screenshots/`.
+Diagnostic CLI options: `--screenshot <path>` (render the window and exit),
+`--screenshot-tab hex|analysis|inspector|structure`, and
+`--screenshot-dialog about|feature-status` to capture the About or Feature status dialog instead
+of the main window. These exist so the same startup path can be verified headlessly and are also
+what produced the images in `docs/screenshots/`.
 
 ## Data locations
 

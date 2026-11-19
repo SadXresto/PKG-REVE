@@ -77,6 +77,11 @@ int main(int argc, char* argv[])
         QStringLiteral("View to show in the diagnostic screenshot: hex, analysis, "
                        "inspector or structure."),
         QStringLiteral("tab"));
+    const QCommandLineOption screenshotDialogOption(
+        QStringLiteral("screenshot-dialog"),
+        QStringLiteral("Capture a dialog instead of the main window: about or "
+                       "feature-status. Requires --screenshot."),
+        QStringLiteral("id"));
     const QCommandLineOption selfTestOption(
         QStringLiteral("selftest"),
         QStringLiteral("Start, open --file inputs, verify analysis and exit."));
@@ -86,6 +91,7 @@ int main(int argc, char* argv[])
     parser.addOption(themeOption);
     parser.addOption(screenshotOption);
     parser.addOption(screenshotTabOption);
+    parser.addOption(screenshotDialogOption);
     parser.addOption(selfTestOption);
     parser.process(app);
 
@@ -97,6 +103,7 @@ int main(int argc, char* argv[])
     options.themeId = parser.value(themeOption);
     options.screenshotPath = parser.value(screenshotOption);
     options.screenshotTab = parser.value(screenshotTabOption);
+    options.screenshotDialog = parser.value(screenshotDialogOption);
     options.selfTest = parser.isSet(selfTestOption);
 
     pkg::Application application(app);

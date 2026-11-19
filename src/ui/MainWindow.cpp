@@ -8,6 +8,7 @@
 #include "core/Logging.h"
 #include "core/ProcessInfo.h"
 #include "data/ThemeManager.h"
+#include "ui/AboutDialog.h"
 #include "ui/ActivityBar.h"
 #include "ui/CommandPalette.h"
 #include "ui/EditorArea.h"
@@ -1888,35 +1889,8 @@ void MainWindow::showLegalNotice()
 
 void MainWindow::showAbout()
 {
-    QString buildType = QString::fromLatin1(PKGSTUDIO_BUILD_TYPE).trimmed();
-    if (buildType.isEmpty())
-        buildType = QStringLiteral("custom");
-    const QString samples =
-        m_samplesPath.isEmpty() ? QStringLiteral("not installed") : m_samplesPath;
-    const QString text =
-        QStringLiteral("<h3>PKG Studio %1</h3>"
-                       "<p><b>Development build</b> · %2 · Qt %3</p>"
-                       "<p>Package analysis, metadata inspection and authorized binary "
-                       "development. This is a demonstration/evaluation build, not a signed "
-                       "release. Features listed as partial or planned under "
-                       "<i>Help → Feature status</i> are not complete.</p>"
-                       "<p>Working today: ELF/PE/ZIP/APK and PSP/Vita/PS4 header analysis, the "
-                       "hex view with live inspector and signature overlay, same-size byte "
-                       "editing with undo and safe saving, the structure builder (form and "
-                       "JSON), the command center and offline help.</p>")
-            .arg(QApplication::applicationVersion(), buildType, QString::fromLatin1(qVersion()));
-    QMessageBox box(QMessageBox::Information, QStringLiteral("About PKG Studio"), text,
-                    QMessageBox::Ok, this);
-    box.setTextFormat(Qt::RichText);
-    box.setInformativeText(QStringLiteral("Platform: %1").arg(QSysInfo::prettyProductName()));
-    box.setDetailedText(QStringLiteral(
-                            "Build type: %1\nQt: %2\nPlatform: %3\nData directory: %4\n"
-                            "Sample files: %5\nLog file: %6\n\nNo telemetry. Nothing is "
-                            "uploaded.")
-                            .arg(buildType, QString::fromLatin1(qVersion()),
-                                 QSysInfo::prettyProductName(), Settings::dataDirectory(),
-                                 samples, Logger::instance().logFilePath()));
-    box.exec();
+    std::unique_ptr<QMessageBox> box(createAboutDialog(this, m_samplesPath));
+    box->exec();
 }
 
 void MainWindow::restoreSession()

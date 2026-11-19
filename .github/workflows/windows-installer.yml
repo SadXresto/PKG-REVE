@@ -1,0 +1,61 @@
+name: Windows installer
+
+# Builds the MSVC/Inno Setup installer on a Windows runner, then installs it and
+# runs packaging/windows/smoke-test.ps1 against the installed application:
+#   --selftest on a bundled sample, plus About and Feature status dialog
+#   screenshots. The installer and the smoke report are uploaded as artifacts.
+#
+# This validates the packaged Windows runtime. It does not code-sign the build,
+# and packaging/windows/README.md still lists the manual checklist items that a
+# runner cannot cover (SmartScreen flow, session restore, uninstall behaviour
+# on a clean VM).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    name: Build installer and smoke test
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6.8.3 (MSVC 2022 x64)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Install Inno Setup 6
+        run: choco install innosetup --no-progress -y
+
+      - name: Build the installer
+        shell: pwsh
+        run: ./packaging/windows/build-installer.ps1 -QtDir $env:QT_ROOT_DIR
+
+      - name: Smoke test the installed application
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist/PKGStudio-*-setup.exe | Select-Object -First 1
+          if (-not $setup) { throw "The build produced no installer" }
+          ./packaging/windows/smoke-test.ps1 -Setup $setup.FullName -ReportDir dist/smoke
+
+      - name: Upload installer and smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PKGStudio-windows-installer
+          path: |
+            dist/PKGStudio-*-setup.exe
+            dist/smoke/**
+          if-no-files-found: warn

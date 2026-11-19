@@ -5,13 +5,18 @@
 #include "core/Logging.h"
 #include "core/ProcessInfo.h"
 #include "data/ThemeManager.h"
+#include "ui/AboutDialog.h"
+#include "ui/DialogCapture.h"
 #include "ui/FileEditor.h"
+#include "ui/HelpDialog.h"
 #include "ui/MainWindow.h"
 
 #include <QApplication>
+#include <QDialog>
 #include <QDir>
 #include <QFileInfo>
 #include <QFontDatabase>
+#include <QMessageBox>
 #include <QPixmap>
 #include <QStyle>
 #include <QStyleFactory>
@@ -153,6 +158,51 @@ int Application::run(const StartupOptions& options)
         // a project on the command line must not drag old tabs back in, which
         // would confuse a demo or a screenshot run.
         m_window->restoreSession();
+    }
+
+    if (!options.screenshotDialog.isEmpty()) {
+        if (options.screenshotPath.isEmpty()) {
+            QTextStream(stderr)
+                << QStringLiteral("--screenshot-dialog requires --screenshot <path>\n");
+            return 2;
+        }
+        std::unique_ptr<QMessageBox> aboutDialog;
+        std::unique_ptr<QDialog> helpDialog;
+        QWidget* dialog = nullptr;
+        if (options.screenshotDialog == QLatin1String("about")) {
+            aboutDialog.reset(ui::createAboutDialog(m_window, m_window->samplesPath()));
+            dialog = aboutDialog.get();
+        } else if (options.screenshotDialog == QLatin1String("feature-status")
+                   || options.screenshotDialog == QLatin1String("featureStatus")) {
+            helpDialog.reset(
+                ui::HelpDialog::createTopicDialog(m_window, QStringLiteral("help.featureStatus")));
+            dialog = helpDialog.get();
+        } else {
+            QTextStream(stderr)
+                << QStringLiteral("Unknown --screenshot-dialog '%1' (expected about or "
+                                  "feature-status)\n")
+                       .arg(options.screenshotDialog);
+            return 2;
+        }
+        if (dialog == nullptr) {
+            QTextStream(stderr) << QStringLiteral("Could not build the '%1' dialog\n")
+                                       .arg(options.screenshotDialog);
+            return 2;
+        }
+        QString error;
+        const bool saved = ui::captureDialog(dialog, options.screenshotPath, &error);
+        if (saved) {
+            QTextStream(stdout) << QStringLiteral("dialog screenshot: %1 -> %2\n")
+                                       .arg(options.screenshotDialog, options.screenshotPath);
+            logInfo(QString::fromLatin1(kLogCategory),
+                    QStringLiteral("Captured the %1 dialog to %2")
+                        .arg(options.screenshotDialog, options.screenshotPath));
+        } else {
+            QTextStream(stderr) << QStringLiteral("dialog screenshot failed: %1\n").arg(error);
+            logError(QString::fromLatin1(kLogCategory),
+                     QStringLiteral("Dialog screenshot failed: %1").arg(error));
+        }
+        return saved ? 0 : 2;
     }
 
     if (!options.screenshotPath.isEmpty()) {
