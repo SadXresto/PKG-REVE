@@ -4,6 +4,28 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.7.2] - 2026-11-20
+
+### Added
+
+- **Find local models on this computer**: a button in the AI chat panel looks for Ollama, LM
+  Studio, llama.cpp and vLLM on their usual loopback ports and reads Ollama model folders on
+  every drive, so a model installed under a namespace (for example
+  `huihui_ai/qwen3.4b:7b`) shows up with its exact tag. When no server is running it still lists
+  the models found on disk and explains how to start the server. Each entry carries its on-disk
+  size and whether it fits this machine's RAM; the scan sends a handful of tiny local requests
+  and reads only the standard model folders, so it stays cheap on low-end machines.
+
+### Fixed
+
+- Choosing a local provider preset no longer contacts the endpoint. Models are listed only when
+  *List models* or *Find on this computer* is pressed, so a server that is not running no longer
+  writes an error into the status line by itself.
+- Byte edits from a reply are tied to the file they were produced for: if that tab closes or
+  another file becomes active, *Apply edits* is disabled instead of applying to the wrong
+  document. The in-flight reply no longer keeps a raw editor pointer.
+- Choosing a preset now shows its hint text, which was previously unused.
+
 ## [0.7.1] - 2026-11-20
 
 ### Added

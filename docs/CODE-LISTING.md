@@ -44,9 +44,8 @@ The AI assistant can propose edits in the same format, inside a fence:
 ```
 ````
 
-The assistant dialog shows how many bytes a reply changes and offers **Apply
-edits to file**, which uses exactly the same validated path as **Assemble into
-file**. Edits outside the file are rejected, and every change is undoable.
+The AI chat panel shows how many bytes a reply changes and offers **Apply
+edits**, which uses exactly the same validated path as **Assemble into file**. Edits outside the file are rejected, and every change is undoable.
 
 ## Limits
 

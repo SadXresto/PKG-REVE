@@ -1,5 +1,8 @@
 #include "ui/AiChatPanel.h"
 
+#include "ai/LocalModels.h"
+#include "core/FormatUtil.h"
+#include "core/ProcessInfo.h"
 #include "data/Database.h"
 #include "data/Settings.h"
 #include "ui/FileEditor.h"
@@ -7,6 +10,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QEvent>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -14,8 +18,10 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QTextBrowser>
 #include <QVBoxLayout>
+#include <QtConcurrent>
 
 #include <utility>
 
@@ -40,9 +46,10 @@ AiChatPanel::AiChatPanel(Database& database, EditorProvider editorProvider, QWid
     refreshContext();
 
     appendMessage(QStringLiteral("PKG Studio"),
-                  QStringLiteral("Pick a model under Provider settings \u2014 one already running on "
-                                 "this computer (Ollama, LM Studio, llama.cpp) or an API key \u2014 "
-                                 "then ask about the open file. Nothing is sent until you press "
+                  QStringLiteral("Press Find on this computer to look for Ollama, LM Studio or "
+                                 "llama.cpp and list every model already installed \u2014 "
+                                 "including namespaced names such as huihui_ai/qwen3.4b:7b. "
+                                 "Then ask about the open file. Nothing is sent until you press "
                                  "Send, and a loopback endpoint keeps every request on this "
                                  "machine."));
 }
@@ -99,8 +106,16 @@ void AiChatPanel::buildUi()
     m_model->setPlaceholderText(QStringLiteral("llama3.1"));
     modelRow->addWidget(m_model, 1);
     m_refreshModels = new QPushButton(QStringLiteral("List models"), m_settingsBox);
+    m_refreshModels->setToolTip(QStringLiteral("Asks the endpoint above for the models it "
+                                               "offers. Only runs when you press it."));
     modelRow->addWidget(m_refreshModels);
     settingsLayout->addLayout(modelRow);
+
+    m_scanLocal = new QPushButton(QStringLiteral("Find on this computer"), m_settingsBox);
+    m_scanLocal->setToolTip(QStringLiteral("Checks the usual local AI ports for a running "
+                                           "server and looks for Ollama model folders on every "
+                                           "drive. Also runs only when you press it."));
+    settingsLayout->addWidget(m_scanLocal);
 
     auto* keyRow = new QHBoxLayout();
     keyRow->setContentsMargins(0, 0, 0, 0);
@@ -166,6 +181,7 @@ void AiChatPanel::buildUi()
     connect(m_settingsToggle, &QPushButton::toggled, m_settingsBox, &QWidget::setVisible);
     connect(m_provider, &QComboBox::activated, this, &AiChatPanel::applyPreset);
     connect(m_refreshModels, &QPushButton::clicked, this, &AiChatPanel::refreshModels);
+    connect(m_scanLocal, &QPushButton::clicked, this, &AiChatPanel::scanForLocalModels);
     connect(m_applyButton, &QPushButton::clicked, this, &AiChatPanel::applyPendingEdits);
     connect(m_sendButton, &QPushButton::clicked, this, [this]() {
         if (m_busy) {
@@ -215,7 +231,7 @@ void AiChatPanel::loadSettings()
         }
     }
     if (presetIndex < 0)
-        presetIndex = presets.size() - 1;  // Custom
+        presetIndex = static_cast<int>(presets.size()) - 1;  // Custom
     m_provider->setCurrentIndex(presetIndex);
     updatePrivacyHint();
 }
@@ -243,10 +259,8 @@ void AiChatPanel::applyPreset(int index)
     m_model->setCurrentText(preset.model);
     saveSettings();
     updatePrivacyHint();
-
-    // A local server usually has models already downloaded; offer them.
-    if (!preset.requiresKey && AiSettingsStore::isLoopbackEndpoint(preset.endpoint))
-        refreshModels();
+    if (!preset.hint.isEmpty())
+        m_status->setText(preset.hint);
 }
 
 void AiChatPanel::refreshModels()
@@ -319,6 +333,15 @@ QString AiChatPanel::fileContext(FileEditor* openEditor) const
 void AiChatPanel::refreshContext()
 {
     FileEditor* openEditor = editor();
+    // Edits belong to the file that was open when the reply arrived. Drop them
+    // rather than letting them land in a different document.
+    if (!m_pendingEditsPath.isEmpty()
+        && (openEditor == nullptr || openEditor->path() != m_pendingEditsPath)) {
+        m_pendingEdits.clear();
+        m_pendingEditsPath.clear();
+        m_applyButton->setEnabled(false);
+        m_applyButton->setVisible(false);
+    }
     if (openEditor == nullptr) {
         m_context->setText(QStringLiteral("Context: no file open"));
         return;
@@ -360,6 +383,7 @@ void AiChatPanel::setBusy(bool busy, const QString& message)
     m_busy = busy;
     m_sendButton->setText(busy ? QStringLiteral("Stop") : QStringLiteral("Send"));
     m_refreshModels->setEnabled(!busy);
+    m_scanLocal->setEnabled(!busy && !m_scanning);
     m_status->setText(message);
 }
 
@@ -383,6 +407,7 @@ void AiChatPanel::sendPrompt()
 
     QString outgoing = prompt;
     FileEditor* openEditor = editor();
+    const QString targetPath = openEditor != nullptr ? openEditor->path() : QString();
     if (values.includeFileContext && openEditor != nullptr) {
         const QString context = fileContext(openEditor);
         if (!context.isEmpty())
@@ -398,7 +423,7 @@ void AiChatPanel::sendPrompt()
 
     setBusy(true, QStringLiteral("Waiting for %1\u2026").arg(values.endpoint));
     m_client->send(values, m_key->text(), m_history,
-                   [this, openEditor](const Result<AiClient::Reply>& reply) {
+                   [this, targetPath](const Result<AiClient::Reply>& reply) {
                        setBusy(false, QString());
                        if (!reply) {
                            const QString detail = reply.error().detail;
@@ -413,6 +438,10 @@ void AiChatPanel::sendPrompt()
                            // stacked on a conversation the model never saw.
                            if (!m_history.isEmpty())
                                m_history.removeLast();
+                           m_pendingEdits.clear();
+                           m_pendingEditsPath.clear();
+                           m_applyButton->setEnabled(false);
+                           m_applyButton->setVisible(false);
                            return;
                        }
 
@@ -428,13 +457,23 @@ void AiChatPanel::sendPrompt()
                            return;
                        }
                        m_pendingEdits = edits;
+                       m_pendingEditsPath = targetPath;
                        const quint64 bytes = listingByteCount(edits);
+                       // Only offer Apply while the file the reply is about is
+                       // still the open one; a raw editor pointer could be gone.
+                       FileEditor* liveEditor = editor();
+                       const bool sameFile = liveEditor != nullptr && !targetPath.isEmpty()
+                           && liveEditor->path() == targetPath;
                        m_applyButton->setVisible(true);
-                       m_applyButton->setEnabled(openEditor != nullptr);
-                       m_status->setText(
-                           QStringLiteral("%1 byte(s) in %2 block(s) \u2014 review, then apply")
-                               .arg(bytes)
-                               .arg(edits.size()));
+                       m_applyButton->setEnabled(sameFile);
+                       QString status = QStringLiteral(
+                                            "%1 byte(s) in %2 block(s) \u2014 review, then apply")
+                                            .arg(bytes)
+                                            .arg(edits.size());
+                       if (!sameFile)
+                           status += QStringLiteral(
+                               " \u2014 switch back to the file this reply was about");
+                       m_status->setText(status);
                    });
 }
 
@@ -443,6 +482,13 @@ void AiChatPanel::applyPendingEdits()
     FileEditor* openEditor = editor();
     if (openEditor == nullptr || m_pendingEdits.isEmpty())
         return;
+    if (m_pendingEditsPath.isEmpty() || openEditor->path() != m_pendingEditsPath) {
+        QMessageBox::information(
+            this, QStringLiteral("These edits belong to another file"),
+            QStringLiteral("The reply was about %1. Open that file again and press Apply edits.")
+                .arg(m_pendingEditsPath));
+        return;
+    }
     auto applied = openEditor->applyByteEdits(m_pendingEdits);
     if (!applied) {
         QMessageBox::warning(this, QStringLiteral("Cannot apply the edits"),
@@ -451,6 +497,7 @@ void AiChatPanel::applyPendingEdits()
         return;
     }
     m_pendingEdits.clear();
+    m_pendingEditsPath.clear();
     m_applyButton->setEnabled(false);
     m_applyButton->setVisible(false);
     m_status->setText(QStringLiteral("%1 byte(s) changed in memory \u2014 undo with Ctrl+Z or "
@@ -461,6 +508,87 @@ void AiChatPanel::applyPendingEdits()
                                  "undoable until you save.")
                       .arg(applied.value())
                       .arg(openEditor->path()));
+}
+
+void AiChatPanel::scanForLocalModels()
+{
+    if (m_scanning)
+        return;
+    m_scanning = true;
+    m_scanLocal->setEnabled(false);
+    m_scanLocal->setText(QStringLiteral("Scanning\u2026"));
+    m_status->setText(
+        QStringLiteral("Looking for local AI servers and Ollama models on every drive\u2026"));
+
+    // The scan touches a handful of sockets and folders; keep it off the UI
+    // thread so the window stays responsive on low-end machines.
+    auto* watcher = new QFutureWatcher<LocalModelScan>(this);
+    connect(watcher, &QFutureWatcher<LocalModelScan>::finished, this, [this, watcher]() {
+        const LocalModelScan scan = watcher->result();
+        watcher->deleteLater();
+        m_scanning = false;
+        m_scanLocal->setEnabled(!m_busy);
+        m_scanLocal->setText(QStringLiteral("Find on this computer"));
+        applyLocalScan(scan);
+    });
+    watcher->setFuture(QtConcurrent::run([]() { return scanLocalModelServers(); }));
+}
+
+void AiChatPanel::applyLocalScan(const LocalModelScan& scan)
+{
+    if (!scan.endpoint.isEmpty() && m_endpoint->text().trimmed() != scan.endpoint) {
+        m_endpoint->setText(scan.endpoint);
+        const QVector<AiProviderPreset> presets = providerPresets();
+        for (int i = 0; i < presets.size(); ++i) {
+            if (presets.at(i).endpoint == scan.endpoint) {
+                const QSignalBlocker blocker(m_provider);
+                m_provider->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    updatePrivacyHint();
+
+    if (!scan.models.isEmpty()) {
+        const QString wanted = m_model->currentText().trimmed();
+        const quint64 ramBytes = sysinfo::totalRamBytes();
+        m_model->clear();
+        for (const LocalModelInfo& model : scan.models) {
+            m_model->addItem(model.name);
+            const int index = m_model->count() - 1;
+            QStringList tooltip{model.name};
+            tooltip << (model.sizeBytes > 0
+                            ? QStringLiteral("%1 on disk").arg(fmt::humanBytes(model.sizeBytes))
+                            : QStringLiteral("Size not reported by the endpoint"));
+            const QString hint = modelFitHint(model.sizeBytes, ramBytes);
+            if (!hint.isEmpty())
+                tooltip << hint;
+            m_model->setItemData(index, tooltip.join(QLatin1Char('\n')), Qt::ToolTipRole);
+        }
+        int selected = wanted.isEmpty() ? -1 : m_model->findText(wanted);
+        if (selected < 0)
+            selected = 0;
+        m_model->setCurrentIndex(selected);
+        saveSettings();
+    }
+
+    if (!scan.notes.isEmpty())
+        appendMessage(QStringLiteral("PKG Studio"), scan.notes.join(QLatin1Char('\n')));
+
+    if (!scan.models.isEmpty()) {
+        m_status->setText(
+            scan.endpoint.isEmpty()
+                ? QStringLiteral("%1 model(s) found on disk \u2014 start the server, then scan "
+                                 "again")
+                      .arg(scan.models.size())
+                : QStringLiteral("%1 model(s) ready \u2014 type a question and press Send")
+                      .arg(scan.models.size()));
+    } else if (!scan.endpoint.isEmpty()) {
+        m_status->setText(QStringLiteral("%1 is running but has no models installed yet")
+                              .arg(scan.providerName));
+    } else {
+        m_status->setText(QStringLiteral("Nothing found \u2014 see the note in the chat"));
+    }
 }
 
 bool AiChatPanel::eventFilter(QObject* watched, QEvent* event)

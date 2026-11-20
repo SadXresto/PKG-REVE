@@ -50,7 +50,10 @@ disassembler, a debugger, a plugin runtime and code-signed installers are *not* 
 - **AI chat** (`Ctrl+Shift+I`): a chat panel docked beside the editors, in the style of the
   chat views in VS Code and OpenCode. Pick a provider preset (Ollama, LM Studio, llama.cpp on
   this computer, the OpenAI API or any custom endpoint), press *List models* to see the models
-  the endpoint already has, and press Enter to send. Prompts can include the open file's first
+  the endpoint already has, or *Find on this computer* to detect a local server and list every
+  installed model — including namespaced Ollama tags such as `huihui_ai/qwen3.4b:7b` —
+  with its size and RAM fit. Nothing is contacted until one of those buttons is pressed. Press
+  Enter to send. Prompts can include the open file's first
   8 KiB of listing; replies that contain a `pkgstudio-edit` block enable *Apply edits*, which
   applies validated, undoable byte edits. The optional API key is stored in `ai.key` with
   owner-only permissions and is never logged. Nothing is sent anywhere except the endpoint you

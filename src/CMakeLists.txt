@@ -31,6 +31,7 @@ target_link_libraries(pkgstudio_core
 # ---------------------------------------------------------------------------
 add_library(pkgstudio_app STATIC
     ai/AiClient.cpp
+    ai/LocalModels.cpp
     app/Application.cpp
     data/Database.cpp
     data/Settings.cpp

@@ -13,6 +13,7 @@ endif()
 
 add_executable(pkgstudio_tests
     test_ai_client.cpp
+    test_local_models.cpp
     test_main.cpp
     test_code_listing.cpp
     test_core.cpp

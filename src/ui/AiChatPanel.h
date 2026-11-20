@@ -18,6 +18,7 @@ class QTextBrowser;
 
 namespace pkg {
 class Database;
+struct LocalModelScan;
 }
 
 namespace pkg::ui {
@@ -49,6 +50,8 @@ private:
     void saveSettings();
     void applyPreset(int index);
     void refreshModels();
+    void scanForLocalModels();
+    void applyLocalScan(const LocalModelScan& scan);
     void updatePrivacyHint();
     void sendPrompt();
     void applyPendingEdits();
@@ -68,6 +71,7 @@ private:
     QLineEdit* m_endpoint = nullptr;
     QComboBox* m_model = nullptr;
     QPushButton* m_refreshModels = nullptr;
+    QPushButton* m_scanLocal = nullptr;
     QLineEdit* m_key = nullptr;
     QPushButton* m_forgetKey = nullptr;
     QCheckBox* m_saveKey = nullptr;
@@ -82,7 +86,9 @@ private:
 
     QVector<AiMessage> m_history;
     QVector<ListingEntry> m_pendingEdits;
+    QString m_pendingEditsPath;
     bool m_busy = false;
+    bool m_scanning = false;
 };
 
 }  // namespace pkg::ui
