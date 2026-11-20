@@ -8,9 +8,14 @@
 #include <QCommandLineParser>
 #include <QDir>
 #include <QFileInfo>
+#include <QIcon>
 #include <QTextStream>
 
 #include <cstdio>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -41,15 +46,53 @@ void installMessageHandler()
     });
 }
 
+#ifdef Q_OS_WIN
+/// The Windows build is a GUI-subsystem executable, so double-clicking it does
+/// not open a console window. Command-line modes still need one: attach to the
+/// caller's console, or create one when launched from Explorer.
+bool wantsConsoleOutput(int argc, char* argv[])
+{
+    for (int i = 1; i < argc; ++i) {
+        const QString arg = QString::fromLocal8Bit(argv[i]);
+        if (arg == QLatin1String("--selftest") || arg == QLatin1String("--help")
+            || arg == QLatin1String("-h") || arg == QLatin1String("-?")
+            || arg == QLatin1String("--version") || arg == QLatin1String("-v"))
+            return true;
+    }
+    return false;
+}
+
+void attachConsoleIfRequested(int argc, char* argv[])
+{
+    if (!wantsConsoleOutput(argc, argv) || GetConsoleWindow() != nullptr)
+        return;
+    // A redirected stdout/stderr (a pipe or a file) already works without a
+    // console, and attaching would steal it.
+    const HANDLE standardOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (standardOut != nullptr && standardOut != INVALID_HANDLE_VALUE
+        && GetFileType(standardOut) != FILE_TYPE_UNKNOWN)
+        return;
+    if (!AttachConsole(ATTACH_PARENT_PROCESS))
+        AllocConsole();
+    FILE* stream = nullptr;
+    freopen_s(&stream, "CONOUT$", "w", stdout);
+    freopen_s(&stream, "CONOUT$", "w", stderr);
+}
+#endif
+
 }  // namespace
 
 int main(int argc, char* argv[])
 {
+#ifdef Q_OS_WIN
+    attachConsoleIfRequested(argc, argv);
+#endif
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("PKGStudio"));
     QApplication::setApplicationDisplayName(QStringLiteral("PKG Studio"));
     QApplication::setApplicationVersion(QStringLiteral(PKGSTUDIO_VERSION));
     QApplication::setOrganizationName(QStringLiteral("PKG Studio"));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/pkgstudio-logo.png")));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
@@ -75,7 +118,7 @@ int main(int argc, char* argv[])
     const QCommandLineOption screenshotTabOption(
         QStringLiteral("screenshot-tab"),
         QStringLiteral("View to show in the diagnostic screenshot: hex, analysis, code, "
-                       "inspector or structure."),
+                       "inspector, structure or chat."),
         QStringLiteral("tab"));
     const QCommandLineOption screenshotDialogOption(
         QStringLiteral("screenshot-dialog"),

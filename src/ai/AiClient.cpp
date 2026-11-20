@@ -15,6 +15,7 @@
 #include <QRegularExpression>
 #include <QUrl>
 
+#include <cstring>
 #include <memory>
 
 namespace pkg {
@@ -111,6 +112,49 @@ QString AiSettingsStore::chatCompletionsUrl(const QString& endpoint)
     if (base.endsWith(QLatin1String("/chat/completions")))
         return base;
     return base + QStringLiteral("/chat/completions");
+}
+
+QString AiSettingsStore::modelsUrl(const QString& endpoint)
+{
+    QString base = endpoint.trimmed();
+    while (base.endsWith(QLatin1Char('/')))
+        base.chop(1);
+    if (base.endsWith(QLatin1String("/chat/completions")))
+        base.chop(static_cast<int>(std::strlen("/chat/completions")));
+    if (base.endsWith(QLatin1String("/models")))
+        return base;
+    return base + QStringLiteral("/models");
+}
+
+QVector<AiProviderPreset> providerPresets()
+{
+    return {
+        {QStringLiteral("ollama"), QStringLiteral("Ollama \u2014 model on this computer"),
+         QStringLiteral("http://127.0.0.1:11434/v1"), QStringLiteral("llama3.1"),
+         QStringLiteral("Uses Ollama's OpenAI-compatible endpoint. Nothing leaves this "
+                        "computer."),
+         false},
+        {QStringLiteral("lmstudio"), QStringLiteral("LM Studio \u2014 model on this computer"),
+         QStringLiteral("http://127.0.0.1:1234/v1"),
+         QStringLiteral("qwen2.5-coder-7b-instruct"),
+         QStringLiteral("Start the LM Studio local server first; the default port is 1234."),
+         false},
+        {QStringLiteral("llamacpp"), QStringLiteral("llama.cpp server \u2014 this computer"),
+         QStringLiteral("http://127.0.0.1:8080/v1"), QStringLiteral("local-model"),
+         QStringLiteral("For `llama-server -m model.gguf`; it answers on port 8080 by "
+                        "default."),
+         false},
+        {QStringLiteral("openai"), QStringLiteral("OpenAI API \u2014 needs an API key"),
+         QStringLiteral("https://api.openai.com/v1"), QStringLiteral("gpt-4o-mini"),
+         QStringLiteral("Hosted endpoint: your prompt and the open file's listing are sent "
+                        "to OpenAI. The key is stored locally, owner-only."),
+         true},
+        {QStringLiteral("custom"), QStringLiteral("Custom OpenAI-compatible endpoint"),
+         QString(), QString(),
+         QStringLiteral("Any server that implements POST /chat/completions and GET "
+                        "/models."),
+         false},
+    };
 }
 
 QString AiClient::systemPrompt()
@@ -259,6 +303,96 @@ void AiClient::send(const AiSettingsValues& settings, const QString& apiKey,
         logInfo(QString::fromLatin1(kLogCategory),
                 QStringLiteral("AI reply received (%1 characters)").arg(content.size()));
         deliver(result);
+    });
+}
+
+void AiClient::listModels(const AiSettingsValues& settings, const QString& apiKey,
+                          ModelCallback callback)
+{
+    const QString urlText = AiSettingsStore::modelsUrl(settings.endpoint);
+    const QUrl url(urlText);
+    if (!url.isValid() || url.host().isEmpty()
+        || (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https"))) {
+        callback(makeError(QStringLiteral("Invalid AI endpoint"),
+                           QStringLiteral("Use an http:// or https:// base URL, for example "
+                                          "http://127.0.0.1:11434/v1")));
+        return;
+    }
+
+    QNetworkRequest request(url);
+    request.setRawHeader("Accept", "application/json");
+    const QString key = trimmedKey(apiKey);
+    if (!key.isEmpty())
+        request.setRawHeader("Authorization", "Bearer " + key.toUtf8());
+    request.setTransferTimeout(20000);
+
+    if (m_modelsReply != nullptr) {
+        m_modelsReply->abort();
+        m_modelsReply = nullptr;
+    }
+    auto finished = std::make_shared<bool>(false);
+    const auto deliver = [callback, finished](const Result<QStringList>& result) {
+        if (*finished)
+            return;
+        *finished = true;
+        callback(result);
+    };
+
+    logInfo(QString::fromLatin1(kLogCategory),
+            QStringLiteral("AI model list request to %1").arg(urlText));
+
+    QNetworkReply* reply = m_manager->get(request);
+    m_modelsReply = reply;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, deliver]() {
+        reply->deleteLater();
+        if (m_modelsReply == reply)
+            m_modelsReply = nullptr;
+
+        const QByteArray body = reply->readAll();
+        const int status =
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (reply->error() != QNetworkReply::NoError) {
+            QString detail = reply->errorString();
+            if (!body.isEmpty())
+                detail += QStringLiteral(" \u2014 ") + QString::fromUtf8(body.left(400));
+            deliver(makeError(
+                QStringLiteral("The endpoint did not answer the model list request"), detail));
+            return;
+        }
+        if (status >= 400) {
+            deliver(makeError(QStringLiteral("The endpoint returned HTTP %1").arg(status),
+                              QString::fromUtf8(body.left(400))));
+            return;
+        }
+
+        const QJsonObject object = QJsonDocument::fromJson(body).object();
+        QStringList names;
+        const auto addName = [&names](const QJsonValue& value) {
+            QString name;
+            if (value.isString()) {
+                name = value.toString();
+            } else {
+                const QJsonObject entry = value.toObject();
+                name = entry.value(QStringLiteral("id")).toString();
+                if (name.isEmpty())
+                    name = entry.value(QStringLiteral("name")).toString();
+                if (name.isEmpty())
+                    name = entry.value(QStringLiteral("model")).toString();
+            }
+            name = name.trimmed();
+            if (!name.isEmpty() && !names.contains(name))
+                names.append(name);
+        };
+        // OpenAI-compatible servers answer {"data": [...]}; Ollama's native
+        // /api/tags answers {"models": [...]} with a name field.
+        for (const QJsonValue& value : object.value(QStringLiteral("data")).toArray())
+            addName(value);
+        for (const QJsonValue& value : object.value(QStringLiteral("models")).toArray())
+            addName(value);
+
+        logInfo(QString::fromLatin1(kLogCategory),
+                QStringLiteral("AI endpoint reported %1 model(s)").arg(names.size()));
+        deliver(names);
     });
 }
 

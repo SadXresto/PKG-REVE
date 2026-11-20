@@ -99,6 +99,11 @@ QPushButton:hover { border-color: @accent; }
 QPushButton:default { background-color: @accent; color: @highlightedText; }
 QPushButton:disabled { color: @gutter; }
 QCheckBox, QRadioButton { background: transparent; color: @windowText; spacing: 6px; }
+QDockWidget { color: @panelText; }
+QDockWidget::title {
+    background-color: @sidebarHeader; color: @panelText;
+    border-bottom: 1px solid @border; padding: 4px 8px;
+}
 QGroupBox { border: 1px solid @border; margin-top: 12px; padding-top: 6px; }
 QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }
 

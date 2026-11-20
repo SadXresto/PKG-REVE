@@ -47,12 +47,14 @@ disassembler, a debugger, a plugin runtime and code-signed installers are *not* 
   and assembles edited text back into the document as undoable byte edits. It works on ELF,
   PE, ZIP/APK and PSP/Vita/PS4 PKG headers alike, and is explicitly a byte listing, not a CPU
   disassembler; see [docs/CODE-LISTING.md](docs/CODE-LISTING.md).
-- **Local AI assistant** (`Ctrl+Shift+I`): OpenAI-compatible `/chat/completions` client with a
-  configurable endpoint and model (Ollama, LM Studio, llama.cpp, vLLM or any compatible
-  service). The optional API key is stored in `ai.key` with owner-only permissions and is
-  never logged. Prompts can include the open file's first 8 KiB of listing; replies that
-  contain a `pkgstudio-edit` block enable *Apply edits to file*, which applies validated,
-  undoable byte edits. Nothing is sent anywhere except the endpoint you configure.
+- **AI chat** (`Ctrl+Shift+I`): a chat panel docked beside the editors, in the style of the
+  chat views in VS Code and OpenCode. Pick a provider preset (Ollama, LM Studio, llama.cpp on
+  this computer, the OpenAI API or any custom endpoint), press *List models* to see the models
+  the endpoint already has, and press Enter to send. Prompts can include the open file's first
+  8 KiB of listing; replies that contain a `pkgstudio-edit` block enable *Apply edits*, which
+  applies validated, undoable byte edits. The optional API key is stored in `ai.key` with
+  owner-only permissions and is never logged. Nothing is sent anywhere except the endpoint you
+  configure.
 - **Image themes**: any theme can carry a background image with a panel-opacity control; the
   image is copied into the theme folder so the theme stays self-contained.
 

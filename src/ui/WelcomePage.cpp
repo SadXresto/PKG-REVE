@@ -5,6 +5,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QPixmap>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -16,13 +17,25 @@ WelcomePage::WelcomePage(QWidget* parent) : QWidget(parent)
     layout->setContentsMargins(28, 24, 28, 24);
     layout->setSpacing(10);
 
+    auto* headerRow = new QHBoxLayout();
+    headerRow->setContentsMargins(0, 0, 0, 0);
+    headerRow->setSpacing(12);
+    auto* logo = new QLabel(this);
+    logo->setObjectName(QStringLiteral("welcomeLogo"));
+    logo->setPixmap(QPixmap(QStringLiteral(":/icons/pkgstudio-logo.png"))
+                        .scaled(52, 52, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    logo->setFixedSize(52, 52);
+    headerRow->addWidget(logo);
+
     auto* title = new QLabel(QStringLiteral("PKG STUDIO"), this);
     QFont titleFont = title->font();
     titleFont.setPointSize(titleFont.pointSize() + 10);
     titleFont.setBold(true);
     titleFont.setLetterSpacing(QFont::AbsoluteSpacing, 2.0);
     title->setFont(titleFont);
-    layout->addWidget(title);
+    headerRow->addWidget(title);
+    headerRow->addStretch(1);
+    layout->addLayout(headerRow);
 
     auto* subtitle = new QLabel(
         QStringLiteral("Package analysis, metadata inspection and authorized binary "

@@ -1,0 +1,3 @@
+// Windows executable icon. Explorer, the taskbar and the shortcut use this;
+// the Qt window icon (:/icons/pkgstudio.png) covers the in-app chrome.
+IDI_APPICON ICON "pkgstudio.ico"

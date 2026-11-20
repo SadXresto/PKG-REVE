@@ -17,6 +17,7 @@
 
 class QAction;
 class QCloseEvent;
+class QDockWidget;
 class QDragEnterEvent;
 class QDropEvent;
 class QLabel;
@@ -29,6 +30,7 @@ class QTimer;
 namespace pkg::ui {
 
 class ActivityBar;
+class AiChatPanel;
 class EditorArea;
 class FileEditor;
 class FileExplorer;
@@ -55,6 +57,8 @@ public:
     bool showStructureForCurrentEditor();
     /// Diagnostic/screenshot helper for the readable listing tab.
     bool showCodeTabForCurrentEditor();
+    /// The editor the user is looking at, for panels that follow the selection.
+    [[nodiscard]] FileEditor* activeEditor() const;
     void openProject(const QString& path);
     void showWelcome();
     void showSettings();
@@ -145,6 +149,8 @@ private:
     EditorArea* m_editors = nullptr;
     OutputPanel* m_output = nullptr;
     WelcomePage* m_welcome = nullptr;
+    QDockWidget* m_aiDock = nullptr;
+    AiChatPanel* m_aiPanel = nullptr;
 
     QLabel* m_statusFile = nullptr;
     QLabel* m_statusFormat = nullptr;

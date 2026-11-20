@@ -15,6 +15,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 #include <functional>
@@ -38,6 +39,20 @@ struct AiSettingsValues {
     bool includeFileContext = true;
 };
 
+/// A ready-made endpoint for a model the user already has, or a hosted
+/// OpenAI-compatible API. Presets only fill in the fields; nothing is contacted
+/// until a model is listed or a prompt is sent.
+struct AiProviderPreset {
+    QString id;
+    QString name;
+    QString endpoint;
+    QString model;
+    QString hint;
+    bool requiresKey = false;
+};
+
+[[nodiscard]] QVector<AiProviderPreset> providerPresets();
+
 /// Reads and writes the AI configuration. The endpoint, model and switches live
 /// in the local SQLite settings table; the key lives in `ai.key`.
 class AiSettingsStore {
@@ -54,6 +69,8 @@ public:
     [[nodiscard]] static bool isLoopbackEndpoint(const QString& endpoint);
     /// Normalises a base URL into the chat completions URL.
     [[nodiscard]] static QString chatCompletionsUrl(const QString& endpoint);
+    /// Normalises a base URL into the model list URL (`/models`).
+    [[nodiscard]] static QString modelsUrl(const QString& endpoint);
 };
 
 class AiClient : public QObject {
@@ -66,6 +83,7 @@ public:
         QString model;
     };
     using Callback = std::function<void(const Result<Reply>&)>;
+    using ModelCallback = std::function<void(const Result<QStringList>&)>;
 
     explicit AiClient(QObject* parent = nullptr);
 
@@ -73,6 +91,10 @@ public:
     /// with an error when the endpoint is unreachable or the reply is invalid.
     void send(const AiSettingsValues& settings, const QString& apiKey,
               const QVector<AiMessage>& messages, Callback callback);
+    /// Lists the model names the endpoint reports, so the chat can offer the
+    /// models already downloaded on this computer instead of a typed guess.
+    void listModels(const AiSettingsValues& settings, const QString& apiKey,
+                    ModelCallback callback);
     void abort();
 
     [[nodiscard]] static QString systemPrompt();
@@ -80,6 +102,7 @@ public:
 private:
     QNetworkAccessManager* m_manager = nullptr;
     QPointer<QNetworkReply> m_reply;
+    QPointer<QNetworkReply> m_modelsReply;
 };
 
 /// Pulls byte edits out of a model reply: fenced ```pkgstudio-edit blocks, or

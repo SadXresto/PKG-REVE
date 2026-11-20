@@ -38,7 +38,7 @@ add_library(pkgstudio_app STATIC
     data/ThemeManager.cpp
     ui/AboutDialog.cpp
     ui/ActivityBar.cpp
-    ui/AiAssistantDialog.cpp
+    ui/AiChatPanel.cpp
     ui/ByteInspector.cpp
     ui/CommandPalette.cpp
     ui/DialogCapture.cpp
@@ -71,6 +71,18 @@ qt_add_executable(PKGStudio main.cpp)
 target_link_libraries(PKGStudio PRIVATE pkgstudio_app)
 target_compile_definitions(PKGStudio PRIVATE
     PKGSTUDIO_VERSION="${PROJECT_VERSION}")
+
+# Application icon: the Qt window icon everywhere, plus the Explorer/taskbar
+# icon on Windows. GUI subsystem on Windows so launching the app from Explorer
+# does not open an extra console window; --selftest and --help still get console
+# output (see main.cpp).
+qt_add_resources(PKGStudio "pkgstudio_icons"
+    PREFIX "/icons"
+    BASE resources
+    FILES resources/pkgstudio-logo.png)
+if(WIN32)
+    target_sources(PKGStudio PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../packaging/windows/pkgstudio.rc)
+endif()
 set_target_properties(PKGStudio PROPERTIES
     OUTPUT_NAME "PKGStudio"
-    WIN32_EXECUTABLE OFF)
+    WIN32_EXECUTABLE ON)

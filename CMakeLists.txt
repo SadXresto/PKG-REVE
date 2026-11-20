@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(PKGStudio
-    VERSION 0.7.0
+    VERSION 0.7.1
     DESCRIPTION "Package analysis and reverse-engineering IDE"
     LANGUAGES CXX)
 

@@ -37,6 +37,13 @@ for path in "$QT_WIN/bin/Qt6Core.dll" "$QT_HOST/bin/qmake" "$MINGW_ROOT/usr/bin/
     [ -e "$path" ] || { echo "error: missing $path (see packaging/windows/README.md)" >&2; exit 1; }
 done
 
+# windres shells out to a preprocessor called "x86_64-w64-mingw32-gcc", but
+# this sysroot only ships the -posix suffixed drivers. Give it the name it
+# expects so compiling the .rc icon resource works.
+if [ ! -e "$MINGW_ROOT/usr/bin/x86_64-w64-mingw32-gcc" ]; then
+    ln -sf x86_64-w64-mingw32-gcc-posix "$MINGW_ROOT/usr/bin/x86_64-w64-mingw32-gcc"
+fi
+
 export PATH="$MINGW_ROOT/usr/bin:$ROOT/.venv-tools/bin:$PATH"
 export GCC_EXEC_PREFIX="$MINGW_ROOT/usr/lib/gcc/"
 # makensis is extracted from a .deb, so it needs pointing at its own data files.
@@ -143,6 +150,7 @@ SETUP="$DIST/PKGStudio-$VERSION-Setup-x64.exe"
 rm -f "$SETUP"
 makensis -V2 \
     -DAppVersion="$VERSION" \
+    "-DMUI_ICON=$ROOT/packaging/windows/pkgstudio.ico" \
     "-DStageDir=$STAGE" \
     "-DOutFile=$SETUP" \
     packaging/windows/PKGStudio.nsi

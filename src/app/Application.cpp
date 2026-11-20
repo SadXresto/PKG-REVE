@@ -6,7 +6,7 @@
 #include "core/ProcessInfo.h"
 #include "data/ThemeManager.h"
 #include "ui/AboutDialog.h"
-#include "ui/AiAssistantDialog.h"
+#include "ui/AiChatPanel.h"
 #include "ui/DialogCapture.h"
 #include "ui/FileEditor.h"
 #include "ui/HelpDialog.h"
@@ -25,6 +25,7 @@
 #include <QTextStream>
 #include <QThreadPool>
 #include <QTimer>
+#include <QVBoxLayout>
 
 #include <algorithm>
 #include <memory>
@@ -169,7 +170,7 @@ int Application::run(const StartupOptions& options)
         }
         std::unique_ptr<QMessageBox> aboutDialog;
         std::unique_ptr<QDialog> helpDialog;
-        std::unique_ptr<ui::AiAssistantDialog> aiDialog;
+        std::unique_ptr<QDialog> aiDialog;
         QWidget* dialog = nullptr;
         if (options.screenshotDialog == QLatin1String("about")) {
             aboutDialog.reset(ui::createAboutDialog(m_window, m_window->samplesPath()));
@@ -180,7 +181,15 @@ int Application::run(const StartupOptions& options)
                 ui::HelpDialog::createTopicDialog(m_window, QStringLiteral("help.featureStatus")));
             dialog = helpDialog.get();
         } else if (options.screenshotDialog == QLatin1String("ai")) {
-            aiDialog.reset(new ui::AiAssistantDialog(m_database, nullptr, m_window));
+            // The chat is a dock in the main window; wrap it for a standalone
+            // capture so the dialog screenshot mode still documents it.
+            aiDialog = std::make_unique<QDialog>(m_window);
+            aiDialog->setWindowTitle(QStringLiteral("PKG Studio AI chat"));
+            aiDialog->resize(460, 700);
+            auto* aiLayout = new QVBoxLayout(aiDialog.get());
+            aiLayout->setContentsMargins(0, 0, 0, 0);
+            aiLayout->addWidget(new ui::AiChatPanel(
+                m_database, [this]() { return m_window->activeEditor(); }, aiDialog.get()));
             dialog = aiDialog.get();
         } else {
             QTextStream(stderr)
@@ -219,6 +228,8 @@ int Application::run(const StartupOptions& options)
             m_window->showStructureForCurrentEditor();
         else if (options.screenshotTab == QLatin1String("code"))
             m_window->showCodeTabForCurrentEditor();
+        else if (options.screenshotTab == QLatin1String("chat"))
+            m_window->showAiAssistant();
         else if (!options.screenshotTab.isEmpty() && options.screenshotTab != QLatin1String("hex"))
             logWarning(QString::fromLatin1(kLogCategory),
                        QStringLiteral("Unknown --screenshot-tab '%1'")

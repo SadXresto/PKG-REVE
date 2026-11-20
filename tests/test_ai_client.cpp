@@ -66,6 +66,28 @@ private:
     QByteArray m_request;
 };
 
+Result<QStringList> runModelList(const QString& endpoint)
+{
+    AiClient client;
+    AiSettingsValues settings;
+    settings.endpoint = endpoint;
+
+    Result<QStringList> result = makeError(QStringLiteral("no reply"));
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    timeout.setInterval(10000);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout, &client, &AiClient::abort);
+    client.listModels(settings, QString(), [&result, &loop](const Result<QStringList>& models) {
+        result = models;
+        loop.quit();
+    });
+    timeout.start();
+    loop.exec();
+    return result;
+}
+
 Result<AiClient::Reply> runRequest(const QString& endpoint)
 {
     AiClient client;
@@ -132,6 +154,46 @@ TEST(AiClient, PostsOpenAiCompatibleRequestAndReadsReply)
     const QVector<ListingEntry> edits = extractEdits(reply.value().content);
     ASSERT_EQ(edits.size(), 1);
     EXPECT_EQ(edits.first().bytes, QByteArray::fromHex("9090"));
+}
+
+TEST(AiClient, ListsInstalledModelsFromTheEndpoint)
+{
+    const QByteArray body = QJsonDocument(QJsonObject{
+        {QStringLiteral("data"),
+         QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("qwen2.5-coder:7b")}},
+                    QJsonObject{{QStringLiteral("id"), QStringLiteral("llama3.1")}},
+                    QJsonObject{{QStringLiteral("id"), QStringLiteral("llama3.1")}}}}})
+        .toJson();
+
+    FakeEndpoint server(body);
+    ASSERT_TRUE(server.listen(QHostAddress::LocalHost, 0));
+    const QString endpoint =
+        QStringLiteral("http://127.0.0.1:%1/v1").arg(server.serverPort());
+
+    const auto models = runModelList(endpoint);
+    ASSERT_TRUE(models) << models.error().message.toUtf8().constData();
+    ASSERT_EQ(models.value().size(), 2);  // duplicates are dropped
+    EXPECT_EQ(models.value().at(0), QStringLiteral("qwen2.5-coder:7b"));
+    EXPECT_TRUE(server.request().startsWith("GET /v1/models "))
+        << server.request().toStdString();
+}
+
+TEST(AiClient, OffersLocalProvidersAndBuildsModelUrls)
+{
+    const QVector<AiProviderPreset> presets = providerPresets();
+    ASSERT_GE(presets.size(), 4);
+    EXPECT_EQ(presets.first().id, QStringLiteral("ollama"));
+    EXPECT_TRUE(AiSettingsStore::isLoopbackEndpoint(presets.first().endpoint));
+    bool hasHosted = false;
+    for (const AiProviderPreset& preset : presets)
+        hasHosted = hasHosted || preset.requiresKey;
+    EXPECT_TRUE(hasHosted);
+
+    EXPECT_EQ(AiSettingsStore::modelsUrl(QStringLiteral("http://127.0.0.1:11434/v1/")),
+              QStringLiteral("http://127.0.0.1:11434/v1/models"));
+    EXPECT_EQ(AiSettingsStore::modelsUrl(
+                  QStringLiteral("http://127.0.0.1:11434/v1/chat/completions")),
+              QStringLiteral("http://127.0.0.1:11434/v1/models"));
 }
 
 TEST(AiClient, ReportsEndpointFailureWithoutHanging)

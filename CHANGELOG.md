@@ -4,6 +4,26 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.7.1] - 2026-11-20
+
+### Added
+
+- **Docked AI chat** (`Ctrl+Shift+I`): the assistant is now a chat panel docked beside the
+  editors, like the chat views in VS Code and OpenCode, instead of a separate window. Pick a
+  provider preset (Ollama, LM Studio, llama.cpp on this computer, or the OpenAI API/custom
+  endpoint), press *List models* to offer the models already installed on the endpoint, and
+  Enter sends while Shift+Enter adds a line. The panel follows the active editor, shows which
+  file it will attach, and applies validated, undoable byte edits.
+- **Application icon**: a drawn logo ships as the window/taskbar icon, the Welcome page mark,
+  the Windows executable icon and the installer icon.
+
+### Fixed
+
+- The Windows build is a GUI-subsystem executable, so starting the app no longer opens an
+  extra console window. `--selftest`, `--help` and `--version` still print to a console.
+- The wallpaper transparency rule is scoped to the main window, so dialogs keep their normal
+  opaque splitters and stacks.
+
 ## [0.7.0] - 2026-11-20
 
 ### Added

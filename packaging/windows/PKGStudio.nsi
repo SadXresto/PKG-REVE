@@ -49,6 +49,9 @@ VIAddVersionKey "CompanyName" "${PUBLISHER}"
 VIAddVersionKey "LegalCopyright" "Development demo build"
 
 !define MUI_ABORTWARNING
+!ifndef MUI_ICON
+  !define MUI_ICON "pkgstudio.ico"
+!endif
 !define MUI_FINISHPAGE_RUN "$INSTDIR\PKGStudio.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Start PKG Studio"
 

@@ -10,7 +10,7 @@
 #include "data/ThemeManager.h"
 #include "ui/AboutDialog.h"
 #include "ui/ActivityBar.h"
-#include "ui/AiAssistantDialog.h"
+#include "ui/AiChatPanel.h"
 #include "ui/CommandPalette.h"
 #include "ui/EditorArea.h"
 #include "ui/FileEditor.h"
@@ -50,6 +50,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QDockWidget>
 #include <QPainter>
 #include <QPointer>
 #include <QProgressBar>
@@ -151,6 +152,8 @@ MainWindow::MainWindow(Database& database, QWidget* parent)
     connect(m_editors, &EditorArea::currentEditorChanged, this, [this](FileEditor* editor) {
         updateFileStatus(editor);
         updateWindowTitle();
+        if (m_aiPanel != nullptr)
+            m_aiPanel->refreshContext();
         if (editor != nullptr) {
             if (auto it = m_analyses.constFind(editor); it != m_analyses.constEnd()) {
                 m_output->setDiagnostics({}, QStringLiteral("Analysis in progress\u2026"));
@@ -281,6 +284,18 @@ void MainWindow::buildUi()
 
     centralLayout->addWidget(m_mainSplitter, 1);
     setCentralWidget(central);
+
+    // Right-hand AI chat, in the style of the chat panels in VS Code and
+    // OpenCode. It follows the active editor and toggles with Ctrl+Shift+I.
+    m_aiPanel = new AiChatPanel(m_database, [this]() { return currentEditor(); }, this);
+    m_aiDock = new QDockWidget(QStringLiteral("AI chat"), this);
+    m_aiDock->setObjectName(QStringLiteral("aiChatDock"));
+    m_aiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_aiDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable
+                          | QDockWidget::DockWidgetClosable);
+    m_aiDock->setWidget(m_aiPanel);
+    addDockWidget(Qt::RightDockWidgetArea, m_aiDock);
+    m_aiDock->hide();
 
     m_welcome = new WelcomePage(m_editors);
     m_editors->addWelcome(m_welcome);
@@ -530,8 +545,8 @@ void MainWindow::buildCommands()
                viewCategory, QKeySequence(QStringLiteral("Ctrl+Shift+P")),
                [this]() { showCommandPalette(); });
 
-    addCommand(QStringLiteral("tools.ai"), QStringLiteral("AI assistant (local)\u2026"),
-               toolsCategory, QKeySequence(QStringLiteral("Ctrl+Shift+I")),
+    addCommand(QStringLiteral("tools.ai"), QStringLiteral("AI chat"), toolsCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+I")),
                [this]() { showAiAssistant(); });
     addCommand(QStringLiteral("tools.settings"), QStringLiteral("Settings\u2026"), toolsCategory,
                QKeySequence(QStringLiteral("Ctrl+,")), [this]() { showSettings(); });
@@ -669,8 +684,9 @@ void MainWindow::buildCommands()
              QStringLiteral("Remove the background image from the current theme"),
              QStringLiteral("wallpaper picture reset"));
     describe(QStringLiteral("tools.ai"),
-             QStringLiteral("Chat with a local AI endpoint and apply its byte edits"),
-             QStringLiteral("assistant ollama lm studio openai local model"));
+             QStringLiteral("Open the AI chat and apply the byte edits it suggests"),
+             QStringLiteral("assistant chat ollama lm studio llama.cpp openai api key local "
+                            "model"));
     describe(QStringLiteral("view.lightweight"),
              QStringLiteral("Toggle reduced animation and effects"),
              QStringLiteral("performance settings"));
@@ -1576,11 +1592,22 @@ bool MainWindow::showCodeTabForCurrentEditor()
 
 void MainWindow::showAiAssistant()
 {
-    auto* dialog = new AiAssistantDialog(m_database, currentEditor(), this);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->show();
-    dialog->raise();
-    dialog->activateWindow();
+    if (m_aiDock == nullptr)
+        return;
+    if (m_aiDock->isVisible()) {
+        m_aiDock->hide();
+        return;
+    }
+    m_aiDock->show();
+    m_aiDock->raise();
+    resizeDocks({m_aiDock}, {420}, Qt::Horizontal);
+    m_aiPanel->refreshContext();
+    m_aiPanel->focusInput();
+}
+
+FileEditor* MainWindow::activeEditor() const
+{
+    return currentEditor();
 }
 
 void MainWindow::chooseThemeBackground()
