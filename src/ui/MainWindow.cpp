@@ -10,6 +10,7 @@
 #include "data/ThemeManager.h"
 #include "ui/AboutDialog.h"
 #include "ui/ActivityBar.h"
+#include "ui/AiAssistantDialog.h"
 #include "ui/CommandPalette.h"
 #include "ui/EditorArea.h"
 #include "ui/FileEditor.h"
@@ -49,6 +50,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPainter>
 #include <QPointer>
 #include <QProgressBar>
 #include <QProgressDialog>
@@ -127,6 +129,9 @@ MainWindow::MainWindow(Database& database, QWidget* parent)
     : QMainWindow(parent), m_database(database)
 {
     m_settings = Settings::instance().values();
+    // The style sheet targets this object name so a wallpaper can be painted
+    // behind the whole window.
+    setObjectName(QStringLiteral("pkgstudioMainWindow"));
     setWindowTitle(QStringLiteral("PKG Studio"));
     setMinimumSize(900, 600);
     resize(1280, 820);
@@ -212,6 +217,7 @@ QStringList MainWindow::openPaths() const
 void MainWindow::buildUi()
 {
     auto* central = new QWidget(this);
+    central->setObjectName(QStringLiteral("centralHost"));
     auto* centralLayout = new QHBoxLayout(central);
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
@@ -493,6 +499,12 @@ void MainWindow::buildCommands()
                [this]() { m_output->setVisible(!m_output->isVisible()); });
     addCommand(QStringLiteral("view.themeEditor"), QStringLiteral("Theme editor\u2026"),
                viewCategory, QKeySequence(), [this]() { showThemeEditor(); });
+    addCommand(QStringLiteral("view.wallpaper"),
+               QStringLiteral("Set theme background image\u2026"), viewCategory, QKeySequence(),
+               [this]() { chooseThemeBackground(); });
+    addCommand(QStringLiteral("view.clearWallpaper"),
+               QStringLiteral("Clear theme background image"), viewCategory, QKeySequence(),
+               [this]() { clearThemeBackground(); });
     addCommand(QStringLiteral("view.lightweight"), QStringLiteral("Lightweight mode"),
                viewCategory, QKeySequence(), [this]() {
                    m_settings.lightweight = !m_settings.lightweight;
@@ -518,6 +530,9 @@ void MainWindow::buildCommands()
                viewCategory, QKeySequence(QStringLiteral("Ctrl+Shift+P")),
                [this]() { showCommandPalette(); });
 
+    addCommand(QStringLiteral("tools.ai"), QStringLiteral("AI assistant (local)\u2026"),
+               toolsCategory, QKeySequence(QStringLiteral("Ctrl+Shift+I")),
+               [this]() { showAiAssistant(); });
     addCommand(QStringLiteral("tools.settings"), QStringLiteral("Settings\u2026"), toolsCategory,
                QKeySequence(QStringLiteral("Ctrl+,")), [this]() { showSettings(); });
     addCommand(QStringLiteral("tools.exportLog"), QStringLiteral("Export log\u2026"), toolsCategory,
@@ -572,6 +587,15 @@ void MainWindow::buildCommands()
     addCommand(QStringLiteral("help.limitations"), QStringLiteral("Limitations and scope"),
                helpCategory, QKeySequence(),
                [this]() { showHelpTopic(QStringLiteral("help.limitations")); });
+    addCommand(QStringLiteral("help.codeListing"), QStringLiteral("Readable listings (Code tab)"),
+               helpCategory, QKeySequence(),
+               [this]() { showHelpTopic(QStringLiteral("help.codeListing")); });
+    addCommand(QStringLiteral("help.ai"), QStringLiteral("AI assistant guide"), helpCategory,
+               QKeySequence(), [this]() { showHelpTopic(QStringLiteral("help.ai")); });
+    addCommand(QStringLiteral("help.privacy"), QStringLiteral("Privacy policy"), helpCategory,
+               QKeySequence(), [this]() { showHelpTopic(QStringLiteral("help.privacy")); });
+    addCommand(QStringLiteral("help.terms"), QStringLiteral("Terms of use"), helpCategory,
+               QKeySequence(), [this]() { showHelpTopic(QStringLiteral("help.terms")); });
 
     const QString demoCategory = QStringLiteral("Demo");
     addCommand(QStringLiteral("demo.openElf"), QStringLiteral("Open ELF sample"), demoCategory,
@@ -638,6 +662,15 @@ void MainWindow::buildCommands()
              QStringLiteral("diagnostics log panel"));
     describe(QStringLiteral("view.themeEditor"), QStringLiteral("Open the theme editor"),
              QStringLiteral("settings colors appearance void black"));
+    describe(QStringLiteral("view.wallpaper"),
+             QStringLiteral("Use an image as the background of the current theme"),
+             QStringLiteral("wallpaper picture custom theme"));
+    describe(QStringLiteral("view.clearWallpaper"),
+             QStringLiteral("Remove the background image from the current theme"),
+             QStringLiteral("wallpaper picture reset"));
+    describe(QStringLiteral("tools.ai"),
+             QStringLiteral("Chat with a local AI endpoint and apply its byte edits"),
+             QStringLiteral("assistant ollama lm studio openai local model"));
     describe(QStringLiteral("view.lightweight"),
              QStringLiteral("Toggle reduced animation and effects"),
              QStringLiteral("performance settings"));
@@ -674,6 +707,18 @@ void MainWindow::buildCommands()
              QStringLiteral("supported parsers"));
     describe(QStringLiteral("help.legal"), QStringLiteral("Show the authorized-use notice"),
              QStringLiteral("license scope"));
+    describe(QStringLiteral("help.codeListing"),
+             QStringLiteral("Explain the readable listing and its limits"),
+             QStringLiteral("disassemble assemble code tab bytes"));
+    describe(QStringLiteral("help.ai"),
+             QStringLiteral("Set up a local AI endpoint and apply its edits"),
+             QStringLiteral("assistant ollama local model key"));
+    describe(QStringLiteral("help.privacy"),
+             QStringLiteral("What is stored locally and what the AI endpoint sees"),
+             QStringLiteral("telemetry data policy"));
+    describe(QStringLiteral("help.terms"),
+             QStringLiteral("Authorized use, AI responsibility and anti-piracy terms"),
+             QStringLiteral("license piracy legal eula"));
     describe(QStringLiteral("help.about"), QStringLiteral("Version, licence and build details"),
              QStringLiteral("version"));
     describe(QStringLiteral("help.guide"),
@@ -775,8 +820,12 @@ void MainWindow::buildMenus()
     m_themeMenu = viewMenu->addMenu(QStringLiteral("Theme"));
     rebuildThemeMenu();
     viewMenu->addAction(m_commands.value(QStringLiteral("view.themeEditor")));
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.wallpaper")));
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.clearWallpaper")));
 
     auto* toolsMenu = menuBar()->addMenu(QStringLiteral("&Tools"));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("tools.ai")));
+    toolsMenu->addSeparator();
     toolsMenu->addAction(m_commands.value(QStringLiteral("tools.settings")));
     toolsMenu->addSeparator();
     toolsMenu->addAction(m_commands.value(QStringLiteral("tools.exportLog")));
@@ -791,10 +840,14 @@ void MainWindow::buildMenus()
     helpMenu->addAction(m_commands.value(QStringLiteral("help.guide")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.shortcuts")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.structureTemplates")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.codeListing")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.ai")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.limitations")));
     helpMenu->addSeparator();
     helpMenu->addAction(m_commands.value(QStringLiteral("help.formats")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.legal")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.privacy")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.terms")));
     helpMenu->addSeparator();
     helpMenu->addAction(m_commands.value(QStringLiteral("demo.openProject")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.featureStatus")));
@@ -1488,7 +1541,11 @@ void MainWindow::showThemeEditor()
         return;
 
     Theme theme = dialog.theme();
-    const Status saved = manager.saveUserTheme(theme);
+    // Copy a wallpaper into the theme folder so the theme stays portable; a
+    // theme without an image is written as plain JSON.
+    const Status saved = theme.backgroundImage.isEmpty()
+        ? manager.saveUserTheme(theme)
+        : manager.setWallpaper(theme.id, theme.backgroundImage, theme.backgroundOpacity);
     if (!saved) {
         QMessageBox::warning(this, QStringLiteral("Cannot save theme"),
                              saved.error().detail.isEmpty() ? saved.error().message
@@ -1505,6 +1562,62 @@ void MainWindow::showThemeEditor()
     applyTheme();
     logInfo(QString::fromLatin1(kLogCategory),
             QStringLiteral("Custom theme saved: %1").arg(theme.id));
+}
+
+bool MainWindow::showCodeTabForCurrentEditor()
+{
+    FileEditor* editor = currentEditor();
+    if (editor == nullptr)
+        return false;
+    editor->refreshCodeListing();
+    editor->showCodeTab();
+    return true;
+}
+
+void MainWindow::showAiAssistant()
+{
+    auto* dialog = new AiAssistantDialog(m_database, currentEditor(), this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->show();
+    dialog->raise();
+    dialog->activateWindow();
+}
+
+void MainWindow::chooseThemeBackground()
+{
+    ThemeManager& manager = ThemeManager::instance();
+    const QString path = QFileDialog::getOpenFileName(
+        this, QStringLiteral("Theme background image"), QString(),
+        QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp *.gif)"));
+    if (path.isEmpty())
+        return;
+    const Theme& theme = manager.current();
+    const Status status = manager.setWallpaper(theme.id, path, theme.backgroundOpacity);
+    if (!status) {
+        QMessageBox::warning(this, QStringLiteral("Cannot set the background image"),
+                             status.error().detail.isEmpty() ? status.error().message
+                                                             : status.error().detail);
+        return;
+    }
+    applyTheme();
+}
+
+void MainWindow::clearThemeBackground()
+{
+    ThemeManager& manager = ThemeManager::instance();
+    const Theme& theme = manager.current();
+    if (theme.backgroundImage.isEmpty()) {
+        statusBar()->showMessage(QStringLiteral("This theme has no background image"), 3000);
+        return;
+    }
+    const Status status = manager.setWallpaper(theme.id, QString(), 100);
+    if (!status) {
+        QMessageBox::warning(this, QStringLiteral("Cannot clear the background image"),
+                             status.error().detail.isEmpty() ? status.error().message
+                                                             : status.error().detail);
+        return;
+    }
+    applyTheme();
 }
 
 QString MainWindow::backupPathFor(const QString& path) const
@@ -1878,12 +1991,22 @@ void MainWindow::showLegalNotice()
     const QString text =
         QStringLiteral(
             "PKG Studio is an analysis tool for files you own or are authorized to "
-            "inspect, such as homebrew packages, public test files and your own builds.\n\n"
+            "inspect and modify, such as homebrew packages, public test files and your own "
+            "builds.\n\n"
             "It does not decrypt protected commercial packages, does not bypass console "
             "security or DRM, and does not extract copyrighted content. A PKG Studio "
-            "licence grants no rights to third-party material.\n\n"
-            "Nothing is uploaded. Logs and crash reports stay on this computer, and crash "
-            "reports contain no file contents or paths.");
+            "licence grants no rights to third-party material, and the Code tab's byte "
+            "listing is not a CPU disassembler.\n\n"
+            "Copies: PKG Studio is proprietary. Distributing the application or a modified "
+            "build without written permission is prohibited; unauthorized copies are "
+            "pirated copies and identified cases may be reported and pursued.")
+        + QStringLiteral(
+              "\n\n"
+              "Privacy: everything stays local. There is no telemetry, no account and no "
+              "upload. The optional AI assistant sends prompts only to the endpoint you "
+              "configure; use a loopback endpoint to keep files on this computer.\n\n"
+              "Full texts: Help \u2192 Privacy policy and Help \u2192 Terms of use, or the "
+              "LICENSE, PRIVACY.md and TERMS.md files shipped with the application.");
     QMessageBox::information(this, QStringLiteral("Legal notice and scope"), text);
 }
 
@@ -1937,6 +2060,29 @@ void MainWindow::saveSession()
     m_database.saveSession(QStringLiteral("main"), session);
     m_settings.lastProject = m_projectPath;
     Settings::instance().setValues(m_settings);
+}
+
+void MainWindow::paintEvent(QPaintEvent* event)
+{
+    QMainWindow::paintEvent(event);
+
+    // A theme wallpaper is painted behind everything; panel colours are
+    // translucent (see ThemeManager::styleSheet) so the image shows through.
+    const Theme& theme = ThemeManager::instance().current();
+    if (theme.backgroundImage.isEmpty())
+        return;
+    if (m_wallpaperPath != theme.backgroundImage) {
+        m_wallpaperPath = theme.backgroundImage;
+        m_wallpaper = QPixmap(theme.backgroundImage);
+    }
+    if (m_wallpaper.isNull())
+        return;
+
+    QPainter painter(this);
+    const QPixmap scaled = m_wallpaper.scaled(
+        size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+    painter.drawPixmap((width() - scaled.width()) / 2, (height() - scaled.height()) / 2,
+                       scaled);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)

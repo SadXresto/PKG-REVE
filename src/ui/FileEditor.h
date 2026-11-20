@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/ByteSearch.h"
+#include "core/CodeListing.h"
 #include "core/FormatInfo.h"
 #include "core/HexDocument.h"
 #include "ui/HexView.h"
@@ -15,7 +16,9 @@
 
 class QCheckBox;
 class QLabel;
+class QLabel;
 class QLineEdit;
+class QPlainTextEdit;
 class QSplitter;
 class QTabWidget;
 class QToolButton;
@@ -75,6 +78,15 @@ public:
     void goToOffsetInteractive();
     void goToOffset(quint64 offset);
 
+    /// Human-readable listing of the file (or its first `maxBytes`), used by the
+    /// Code tab and as bounded context for the AI assistant.
+    [[nodiscard]] QString readableListing(quint64 maxBytes) const;
+    /// Applies parsed listing runs as undoable in-memory edits. Enables editing
+    /// for this file first, because the change must stay reviewable.
+    [[nodiscard]] Result<int> applyByteEdits(const QVector<pkg::ListingEntry>& entries);
+    void showCodeTab();
+    void refreshCodeListing();
+
 signals:
     void cursorMoved(quint64 offset);
     void selectionChanged(quint64 start, quint64 length);
@@ -99,6 +111,8 @@ private:
     QToolButton* m_structureToggle = nullptr;
     QTabWidget* m_tabs = nullptr;
     QSplitter* m_hexSplitter = nullptr;
+    QPlainTextEdit* m_listingEdit = nullptr;
+    QLabel* m_listingStatus = nullptr;
     StructurePanel* m_structurePanel = nullptr;
     HexView* m_hex = nullptr;
     ByteInspector* m_inspector = nullptr;

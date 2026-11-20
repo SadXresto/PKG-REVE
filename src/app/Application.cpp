@@ -6,6 +6,7 @@
 #include "core/ProcessInfo.h"
 #include "data/ThemeManager.h"
 #include "ui/AboutDialog.h"
+#include "ui/AiAssistantDialog.h"
 #include "ui/DialogCapture.h"
 #include "ui/FileEditor.h"
 #include "ui/HelpDialog.h"
@@ -168,6 +169,7 @@ int Application::run(const StartupOptions& options)
         }
         std::unique_ptr<QMessageBox> aboutDialog;
         std::unique_ptr<QDialog> helpDialog;
+        std::unique_ptr<ui::AiAssistantDialog> aiDialog;
         QWidget* dialog = nullptr;
         if (options.screenshotDialog == QLatin1String("about")) {
             aboutDialog.reset(ui::createAboutDialog(m_window, m_window->samplesPath()));
@@ -177,10 +179,13 @@ int Application::run(const StartupOptions& options)
             helpDialog.reset(
                 ui::HelpDialog::createTopicDialog(m_window, QStringLiteral("help.featureStatus")));
             dialog = helpDialog.get();
+        } else if (options.screenshotDialog == QLatin1String("ai")) {
+            aiDialog.reset(new ui::AiAssistantDialog(m_database, nullptr, m_window));
+            dialog = aiDialog.get();
         } else {
             QTextStream(stderr)
-                << QStringLiteral("Unknown --screenshot-dialog '%1' (expected about or "
-                                  "feature-status)\n")
+                << QStringLiteral("Unknown --screenshot-dialog '%1' (expected about, "
+                                  "feature-status or ai)\n")
                        .arg(options.screenshotDialog);
             return 2;
         }
@@ -212,6 +217,8 @@ int Application::run(const StartupOptions& options)
             m_window->showByteInspectorForCurrentEditor();
         else if (options.screenshotTab == QLatin1String("structure"))
             m_window->showStructureForCurrentEditor();
+        else if (options.screenshotTab == QLatin1String("code"))
+            m_window->showCodeTabForCurrentEditor();
         else if (!options.screenshotTab.isEmpty() && options.screenshotTab != QLatin1String("hex"))
             logWarning(QString::fromLatin1(kLogCategory),
                        QStringLiteral("Unknown --screenshot-tab '%1'")

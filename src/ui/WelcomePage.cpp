@@ -112,8 +112,8 @@ WelcomePage::WelcomePage(QWidget* parent) : QWidget(parent)
     auto* notice = new QLabel(
         QStringLiteral("PKG Studio analyzes files you are authorized to inspect. It does not "
                        "decrypt or extract protected commercial content, and a PKG Studio "
-                       "licence grants no rights to third-party material. No telemetry: files "
-                       "never leave this computer."),
+                       "licence grants no rights to third-party material. No telemetry and no "
+                       "upload; the optional AI assistant contacts only the endpoint you set."),
         this);
     notice->setObjectName(QStringLiteral("hintLabel"));
     notice->setWordWrap(true);

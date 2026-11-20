@@ -5,6 +5,7 @@ add_library(pkgstudio_core STATIC
     core/AtomicFile.cpp
     core/ByteReader.cpp
     core/ByteSearch.cpp
+    core/CodeListing.cpp
     core/FileSource.cpp
     core/FormatInfo.cpp
     core/FormatUtil.cpp
@@ -29,6 +30,7 @@ target_link_libraries(pkgstudio_core
 # pkgstudio_app - data layer, UI and application wiring.
 # ---------------------------------------------------------------------------
 add_library(pkgstudio_app STATIC
+    ai/AiClient.cpp
     app/Application.cpp
     data/Database.cpp
     data/Settings.cpp
@@ -36,6 +38,7 @@ add_library(pkgstudio_app STATIC
     data/ThemeManager.cpp
     ui/AboutDialog.cpp
     ui/ActivityBar.cpp
+    ui/AiAssistantDialog.cpp
     ui/ByteInspector.cpp
     ui/CommandPalette.cpp
     ui/DialogCapture.cpp
@@ -57,7 +60,7 @@ add_library(pkgstudio_app STATIC
     ui/WelcomePage.cpp
 )
 target_link_libraries(pkgstudio_app
-    PUBLIC pkgstudio_core Qt6::Widgets Qt6::Sql)
+    PUBLIC pkgstudio_core Qt6::Widgets Qt6::Sql Qt6::Network)
 target_compile_definitions(pkgstudio_app PRIVATE
     PKGSTUDIO_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
 

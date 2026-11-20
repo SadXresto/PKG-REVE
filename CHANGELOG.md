@@ -4,6 +4,34 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.7.0] - 2026-11-20
+
+### Added
+
+- **Readable listings (Code tab)**: any file is rendered as editable `offset  hex  ascii`
+  text (`core/CodeListing`) and edited text is validated and assembled back as undoable byte
+  edits. Works on ELF, PE, ZIP/APK and PSP/Vita/PS4 PKG headers; explicitly documented as a
+  byte listing, not a CPU disassembler, in `docs/CODE-LISTING.md` and the help topic.
+- **Local AI assistant** (`Ctrl+Shift+I`): OpenAI-compatible `/chat/completions` client with
+  configurable endpoint/model and optional API key stored in `ai.key` (owner read/write, never
+  logged). Prompts can include the open file's first 8 KiB of listing; `pkgstudio-edit` blocks
+  in a reply enable *Apply edits to file*, which uses the same validated, undoable path as the
+  Code tab. Loopback endpoints keep everything on the machine.
+- **Image themes**: themes carry an optional `backgroundImage` and `backgroundOpacity`; the
+  image is copied into the theme folder, painted behind the window and shown through
+  translucent panels. Editable in the theme editor and via *View → Set theme background
+  image*.
+- **Licence and policies**: proprietary `LICENSE` with an anti-piracy notice, `TERMS.md`,
+  `PRIVACY.md`, and matching offline help topics (Privacy policy, Terms of use, AI assistant,
+  Readable listings).
+- Tests: `tests/test_code_listing.cpp` (listing round trip, parsing, undoable apply, AI block
+  extraction) and `tests/test_ai_client.cpp` (request/response against a local fake endpoint).
+
+### Changed
+
+- Version 0.7.0. The Windows ZIP and installer built earlier are 0.6.0 and do not include
+  these features.
+
 ## [Unreleased]
 
 ### Added

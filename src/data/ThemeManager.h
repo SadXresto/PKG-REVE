@@ -31,6 +31,10 @@ public:
     [[nodiscard]] Status setCurrent(const QString& id);
     /// Writes a user theme as JSON with an atomic replace.
     [[nodiscard]] Status saveUserTheme(const Theme& theme);
+    /// Sets or clears the wallpaper of `id`, copying the image into the user
+    /// theme folder so the theme stays self-contained. `opacity` (20-100)
+    /// controls how much of the image shows through the panel colours.
+    [[nodiscard]] Status setWallpaper(const QString& id, const QString& imagePath, int opacity);
     [[nodiscard]] Status importThemeFile(const QString& path);
     [[nodiscard]] Status exportThemeFile(const QString& id, const QString& path);
     [[nodiscard]] QString userThemeDirectory() const { return m_userDirectory; }

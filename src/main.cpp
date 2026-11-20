@@ -74,13 +74,13 @@ int main(int argc, char* argv[])
         QStringLiteral("path"));
     const QCommandLineOption screenshotTabOption(
         QStringLiteral("screenshot-tab"),
-        QStringLiteral("View to show in the diagnostic screenshot: hex, analysis, "
+        QStringLiteral("View to show in the diagnostic screenshot: hex, analysis, code, "
                        "inspector or structure."),
         QStringLiteral("tab"));
     const QCommandLineOption screenshotDialogOption(
         QStringLiteral("screenshot-dialog"),
-        QStringLiteral("Capture a dialog instead of the main window: about or "
-                       "feature-status. Requires --screenshot."),
+        QStringLiteral("Capture a dialog instead of the main window: about, "
+                       "feature-status or ai. Requires --screenshot."),
         QStringLiteral("id"));
     const QCommandLineOption selfTestOption(
         QStringLiteral("selftest"),

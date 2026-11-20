@@ -99,6 +99,11 @@ QJsonObject Theme::toJson() const
     object.insert(QStringLiteral("name"), name);
     object.insert(QStringLiteral("author"), author);
     object.insert(QStringLiteral("dark"), dark);
+    if (!backgroundImage.isEmpty()) {
+        object.insert(QStringLiteral("backgroundImage"), backgroundImage);
+        object.insert(QStringLiteral("backgroundOpacity"),
+                      std::clamp(backgroundOpacity, 20, 100));
+    }
 
     QJsonObject colorObject;
     QStringList keys = colors.keys();
@@ -120,6 +125,9 @@ Result<Theme> Theme::fromJson(const QJsonObject& object)
     theme.name = object.value(QStringLiteral("name")).toString().trimmed();
     theme.author = object.value(QStringLiteral("author")).toString();
     theme.dark = object.value(QStringLiteral("dark")).toBool(true);
+    theme.backgroundImage = object.value(QStringLiteral("backgroundImage")).toString().trimmed();
+    theme.backgroundOpacity = std::clamp(
+        object.value(QStringLiteral("backgroundOpacity")).toInt(82), 20, 100);
 
     const QJsonObject colorObject = object.value(QStringLiteral("colors")).toObject();
     for (auto it = colorObject.begin(); it != colorObject.end(); ++it) {

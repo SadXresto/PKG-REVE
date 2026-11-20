@@ -12,7 +12,9 @@ if(NOT GTest_FOUND)
 endif()
 
 add_executable(pkgstudio_tests
+    test_ai_client.cpp
     test_main.cpp
+    test_code_listing.cpp
     test_core.cpp
     test_file_source.cpp
     test_parsers.cpp

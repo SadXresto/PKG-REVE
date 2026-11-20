@@ -5,7 +5,9 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QJsonDocument>
 #include <QPalette>
 #include <QStyleFactory>
@@ -291,6 +293,48 @@ Status ThemeManager::importThemeFile(const QString& path)
     return saveUserTheme(theme.value());
 }
 
+Status ThemeManager::setWallpaper(const QString& id, const QString& imagePath, int opacity)
+{
+    const auto it = m_themes.find(id);
+    if (it == m_themes.constEnd())
+        return makeError(QStringLiteral("Unknown theme"), id);
+
+    Theme theme = it.value();
+    if (imagePath.isEmpty()) {
+        theme.backgroundImage.clear();
+    } else {
+        const QFileInfo source(imagePath);
+        if (!source.isFile())
+            return makeError(QStringLiteral("Background image not found"), imagePath);
+        QImageReader reader(imagePath);
+        if (!reader.canRead())
+            return makeError(QStringLiteral("Unsupported image format"), imagePath);
+        if (m_userDirectory.isEmpty())
+            return makeError(QStringLiteral("No user theme directory configured"));
+
+        const QString imagesDirectory = QDir(m_userDirectory).filePath(QStringLiteral("images"));
+        if (!QDir().mkpath(imagesDirectory))
+            return makeError(QStringLiteral("Cannot create the theme image folder"),
+                             imagesDirectory);
+        const QString target =
+            QDir(imagesDirectory).filePath(theme.id + QLatin1Char('-') + source.fileName());
+        if (QFileInfo(target).absoluteFilePath() != source.absoluteFilePath()) {
+            QFile::remove(target);
+            if (!QFile::copy(source.absoluteFilePath(), target))
+                return makeError(QStringLiteral("Cannot copy the background image"), target);
+        }
+        theme.backgroundImage = target;
+    }
+    theme.backgroundOpacity = std::clamp(opacity, 20, 100);
+
+    const Status saved = saveUserTheme(theme);
+    if (!saved)
+        return saved;
+    if (m_currentId == id)
+        emit themeChanged(current());
+    return okStatus();
+}
+
 Status ThemeManager::exportThemeFile(const QString& id, const QString& path)
 {
     const auto it = m_themes.constFind(id);
@@ -338,6 +382,22 @@ void ThemeManager::apply(const Theme& theme, QApplication& app)
 QString ThemeManager::styleSheet(const Theme& theme)
 {
     QString sheet = sheetTemplate();
+    const bool wallpaper = !theme.backgroundImage.isEmpty()
+        && QFileInfo::exists(theme.backgroundImage);
+
+    // Background roles become translucent over a wallpaper so the image is
+    // visible through the panels while text colours stay unchanged.
+    static const QStringList translucentRoles = {
+        QStringLiteral("window"),       QStringLiteral("panel"),
+        QStringLiteral("base"),         QStringLiteral("alternateBase"),
+        QStringLiteral("button"),       QStringLiteral("activityBar"),
+        QStringLiteral("statusBar"),    QStringLiteral("tabActive"),
+        QStringLiteral("tabInactive"),  QStringLiteral("gutter"),
+        QStringLiteral("inputBackground"),
+        QStringLiteral("sidebarHeader"),
+    };
+    const int opacity = std::clamp(theme.backgroundOpacity, 20, 100);
+
     // Longest role first: a naive replacement would turn "@windowText" into
     // "<window colour>Text" because "@window" is a prefix of it.
     QStringList roles = Theme::requiredRoles();
@@ -345,7 +405,33 @@ QString ThemeManager::styleSheet(const Theme& theme)
         return left.size() > right.size();
     });
     for (const QString& role : roles) {
-        sheet.replace(QLatin1Char('@') + role, theme.color(role).name(QColor::HexRgb));
+        const QColor color = theme.color(role);
+        QString value = color.name(QColor::HexRgb);
+        if (wallpaper && translucentRoles.contains(role)) {
+            value = QStringLiteral("rgba(%1, %2, %3, %4%)")
+                        .arg(color.red())
+                        .arg(color.green())
+                        .arg(color.blue())
+                        .arg(opacity);
+        }
+        sheet.replace(QLatin1Char('@') + role, value);
+    }
+
+    if (wallpaper) {
+        // Structural containers must not paint an opaque layer over the image
+        // the main window draws underneath them.
+        sheet.prepend(QStringLiteral(
+            "QWidget#centralHost, QWidget#centralHost > QWidget, QSplitter, "
+            "QStackedWidget { background: transparent; }\n"));
+        QString path = QDir::fromNativeSeparators(theme.backgroundImage);
+        path.replace(QLatin1Char('"'), QStringLiteral("%22"));
+        sheet.prepend(QStringLiteral("QMainWindow#pkgstudioMainWindow {\n"
+                                     "    background-image: url(\"%1\");\n"
+                                     "    background-position: center;\n"
+                                     "    background-repeat: no-repeat;\n"
+                                     "    background-color: %2;\n"
+                                     "}\n")
+                          .arg(path, theme.color(QStringLiteral("window")).name(QColor::HexRgb)));
     }
     return sheet;
 }

@@ -20,6 +20,13 @@ struct Theme {
     int schemaVersion = 1;
     QHash<QString, QColor> colors;
 
+    /// Optional wallpaper image (absolute path). Empty means a flat theme. The
+    /// image is drawn behind the window while panel colours become translucent.
+    QString backgroundImage;
+    /// Opacity of background surfaces over the image, 20-100. 100 hides the
+    /// image completely and keeps the theme flat.
+    int backgroundOpacity = 82;
+
     /// Colour roles every theme must define.
     [[nodiscard]] static QStringList requiredRoles();
     /// Human readable role labels for the theme editor.

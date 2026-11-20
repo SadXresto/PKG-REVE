@@ -3,6 +3,8 @@
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QDialogButtonBox>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -10,6 +12,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSpinBox>
 #include <QVBoxLayout>
 
 namespace pkg::ui {
@@ -58,7 +61,51 @@ ThemeEditorDialog::ThemeEditorDialog(const Theme& base, QWidget* parent)
     m_darkBox = new QCheckBox(QStringLiteral("Dark theme"), this);
     m_darkBox->setChecked(m_theme.dark);
     form->addRow(QString(), m_darkBox);
+
+    auto* backgroundRow = new QWidget(this);
+    auto* backgroundLayout = new QHBoxLayout(backgroundRow);
+    backgroundLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundLayout->setSpacing(6);
+    m_backgroundEdit = new QLineEdit(backgroundRow);
+    m_backgroundEdit->setReadOnly(true);
+    m_backgroundEdit->setText(m_theme.backgroundImage);
+    m_backgroundEdit->setPlaceholderText(
+        QStringLiteral("No image \u2014 the theme uses flat colours"));
+    backgroundLayout->addWidget(m_backgroundEdit, 1);
+    auto* browse = new QPushButton(QStringLiteral("Choose\u2026"), backgroundRow);
+    backgroundLayout->addWidget(browse);
+    auto* clear = new QPushButton(QStringLiteral("Clear"), backgroundRow);
+    backgroundLayout->addWidget(clear);
+    form->addRow(QStringLiteral("Background image"), backgroundRow);
+
+    m_opacity = new QSpinBox(this);
+    m_opacity->setRange(20, 100);
+    m_opacity->setValue(m_theme.backgroundOpacity);
+    m_opacity->setSuffix(QStringLiteral("%"));
+    m_opacity->setToolTip(
+        QStringLiteral("Opacity of the panels over the image. Lower values show more of the "
+                       "picture; 100% hides it."));
+    form->addRow(QStringLiteral("Panel opacity"), m_opacity);
+
     layout->addLayout(form);
+
+    connect(browse, &QPushButton::clicked, this, [this]() {
+        const QString path = QFileDialog::getOpenFileName(
+            this, QStringLiteral("Background image"), QString(),
+            QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp *.gif)"));
+        if (path.isEmpty())
+            return;
+        m_theme.backgroundImage = path;
+        m_backgroundEdit->setText(path);
+        if (m_theme.backgroundOpacity >= 100)
+            m_opacity->setValue(82);
+    });
+    connect(clear, &QPushButton::clicked, this, [this]() {
+        m_theme.backgroundImage.clear();
+        m_backgroundEdit->clear();
+    });
+    connect(m_opacity, &QSpinBox::valueChanged, this,
+            [this](int value) { m_theme.backgroundOpacity = value; });
 
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
@@ -96,6 +143,12 @@ ThemeEditorDialog::ThemeEditorDialog(const Theme& base, QWidget* parent)
     buttons->button(QDialogButtonBox::Save)->setText(QStringLiteral("Save theme"));
     layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::accepted, this, [this]() {
+        m_theme.backgroundOpacity = m_opacity->value();
+        if (!m_theme.backgroundImage.isEmpty()
+            && !QFileInfo::exists(m_theme.backgroundImage)) {
+            m_error->setText(QStringLiteral("The background image does not exist"));
+            return;
+        }
         Theme candidate = theme();
         QString reason;
         if (!candidate.isValid(&reason)) {

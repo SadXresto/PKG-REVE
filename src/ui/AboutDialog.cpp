@@ -24,7 +24,11 @@ QString AboutInfo::summaryHtml() const
                           "<p>Working today: ELF/PE/ZIP/APK and PSP/Vita/PS4 header analysis, the "
                           "hex view with live inspector and signature overlay, same-size byte "
                           "editing with undo and safe saving, the structure builder (form and "
-                          "JSON), the command center and offline help.</p>")
+                          "JSON), readable listings that assemble back into the file, image "
+                          "themes, the local-endpoint AI assistant, the command center and "
+                          "offline help.</p>"
+                          "<p>Privacy: local only. No telemetry, no account, no upload. The AI "
+                          "assistant contacts only the endpoint you configure.</p>")
         .arg(version, buildType, qtVersion);
 }
 
@@ -37,7 +41,8 @@ QString AboutInfo::detailsText() const
                           "Sample files: %5\n"
                           "Log file: %6\n"
                           "\n"
-                          "No telemetry. Nothing is uploaded.")
+                          "No telemetry, no account, no upload. The optional AI assistant "
+                          "sends requests only to the endpoint you configure.")
         .arg(buildType, qtVersion, platform, dataDirectory, samplesPath, logFilePath);
 }
 

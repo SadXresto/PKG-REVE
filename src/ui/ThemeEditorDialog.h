@@ -9,6 +9,7 @@ class QCheckBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QSpinBox;
 
 namespace pkg::ui {
 
@@ -30,6 +31,8 @@ private:
     QLineEdit* m_nameEdit = nullptr;
     QLineEdit* m_idEdit = nullptr;
     QCheckBox* m_darkBox = nullptr;
+    QLineEdit* m_backgroundEdit = nullptr;
+    QSpinBox* m_opacity = nullptr;
     QLabel* m_error = nullptr;
 };
 

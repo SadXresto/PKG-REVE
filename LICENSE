@@ -1,0 +1,83 @@
+PKG STUDIO PROPRIETARY LICENSE
+Evaluation and Development Build — Version 1.0
+Copyright (c) 2026 the PKG Studio authors. All rights reserved.
+
+This is a proprietary licence, not an open-source licence. Read it before you
+install, copy or run PKG Studio ("the Software").
+
+1. GRANT
+   Subject to this licence, you are granted a personal, non-exclusive,
+   non-transferable, revocable licence to install and run the Software on
+   devices you own or control, and to use it on files you own or are legally
+   authorized to inspect or modify.
+
+2. NO UNAUTHORIZED COPIES
+   You may not copy, publish, upload, mirror, sublicense, rent, lease, sell,
+   resell or otherwise distribute the Software, in whole or in part, or any
+   modified or repackaged build of it, without prior written permission from
+   the copyright holder. Making the Software or its installer available on
+   file-sharing sites, marketplaces, forums, torrents, mirrors or bundling it
+   with other products is not permitted.
+
+3. ANTI-PIRACY NOTICE
+   Unauthorized copies of the Software are pirated copies. The copyright holder
+   treats unauthorized copying, redistribution and resale as piracy and as a
+   breach of this licence and of applicable copyright law. Identified cases may
+   be reported to the hosting provider, the relevant platform, payment
+   providers or law-enforcement authorities, and pursued with takedown notices
+   and legal claims where available. This does not limit any other remedy.
+
+   This notice is not a claim that every private copy is a criminal offence:
+   whether a particular act is criminal depends on the law of your country. It
+   does mean that distributing the Software without permission is prohibited
+   and will be acted on.
+
+4. RESTRICTIONS
+   You may not:
+   a. remove, obscure or alter copyright, licence, attribution or anti-piracy
+      notices in the Software or its About/Legal screens;
+   b. use the Software to bypass DRM, console security, copy protection,
+      licence checks or encryption, or to infringe anyone's copyright;
+   c. use the Software to modify, distribute or play protected commercial
+      content you are not authorized to modify;
+   d. reverse engineer, decompile or disassemble the Software itself, except
+      where that restriction is prohibited by mandatory law;
+   e. use the Software to break any applicable law.
+
+5. YOUR FILES AND YOUR RESPONSIBILITY
+   The Software reads, lists and can patch bytes of files you open. You are
+   solely responsible for having the right to modify those files and for the
+   consequences of saving changes. Modified packages may be rejected by a
+   console, may void a warranty, or may be unlawful to distribute.
+   The optional AI assistant only talks to the endpoint you configure and only
+   proposes edits; you review and apply them, so the result is your change.
+
+6. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. It is a
+   development build: features marked partial, experimental or planned are not
+   guaranteed to work or to stay.
+
+7. LIMITATION OF LIABILITY
+   TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE AUTHORS ARE NOT LIABLE FOR ANY
+   DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY OR CONSEQUENTIAL DAMAGES,
+   OR FOR DATA LOSS, CORRUPTED FILES, BRICKED DEVICES, LOST PROFITS OR
+   BUSINESS INTERRUPTION, ARISING FROM THE USE OF OR INABILITY TO USE THE
+   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY.
+
+8. TERMINATION
+   This licence terminates automatically if you breach it. On termination you
+   must stop using the Software and delete all copies you control. Sections 2,
+   3, 4, 6 and 7 survive termination.
+
+9. THIRD-PARTY COMPONENTS
+   The Software is built with Qt and other third-party libraries that are
+   distributed under their own licences. Those licences govern those
+   components and are not restricted by this document. The Software does not
+   include or grant any rights to third-party game, application or console
+   content.
+
+10. CONTACT
+    Permission requests, piracy reports and licence questions go to the project
+    maintainer through the channel this copy was obtained from.

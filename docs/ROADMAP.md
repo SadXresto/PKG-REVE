@@ -61,9 +61,11 @@ PS Vita/PSP and PS4 container headers are implemented. PS5 is not implemented an
 APK is ZIP-level only. No extraction or install validation. Platform adapter abstraction beyond
 `IFormatParser` (device workflows, package building) is not started.
 
-## Phase 5 — Disassembly and debugging: **not started**
+## Phase 5 — Disassembly and debugging: **partial — byte listings only**
 
-No Capstone, no LLDB, no registers/memory/breakpoints UI. These are absent rather than stubbed.
+The Code tab disassembles *bytes* into editable text and assembles them back (see
+[CODE-LISTING.md](CODE-LISTING.md)). This is not instruction decoding. There is no Capstone,
+no LLDB, no registers/memory/breakpoints UI; those are absent rather than stubbed.
 
 ## Phase 6 — Modding studio: **partial — safe byte editing is in**
 
@@ -75,10 +77,12 @@ Not implemented: inserting/deleting bytes, multi-range editing or paste, asset/c
 editing, diff view, modification history beyond the in-memory undo journal, export validation,
 package rebuilding, and any write path for encrypted or protected content.
 
-## Phase 7 — Plugin SDK, AI assistant, license manager: **not started**
+## Phase 7 — Plugin SDK, AI assistant, license manager: **partial — AI assistant in**
 
 A design sketch for plugins exists in [PLUGIN_SDK.md](PLUGIN_SDK.md); there is no loader, no
-manifest parser, no sample plugin. There is no AI integration and no license manager.
+manifest parser and no sample plugin. The AI assistant is implemented as a local-endpoint
+OpenAI-compatible client that proposes validated, undoable byte edits (no hosted account, no
+relay). There is no license manager; licensing is a static `LICENSE` file.
 
 ## Phase 8 — Optimization, testing, hardening: **in progress**
 

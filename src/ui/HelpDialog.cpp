@@ -141,6 +141,10 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
                   "binary AndroidManifest.xml is not decoded.</li>"
                   "<li>PSP/Vita and PS4 support covers documented header fields only. Payloads "
                   "are not decrypted or extracted, and PS5 is not implemented.</li>"
+                  "<li>The Code tab lists bytes in editable text and assembles them back; it is "
+                  "a byte listing, not a CPU disassembler, and cannot change the file length.</li>"
+                  "<li>The AI assistant needs an endpoint you configure. It proposes byte edits "
+                  "that you review and apply; replies can be wrong.</li>"
                   "<li>Structure templates are user layouts: validated for schema and file "
                   "bounds, never proof that a file conforms to a format.</li>"
                   "<li>Signature matches are documented patterns with a confidence note, not a "
@@ -148,10 +152,110 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
                   "</ul>"
                   "<h3>Planned, not present</h3>"
                   "<ul>"
-                  "<li>Binary diff/navigation, disassembly, debugging, plugin runtime, AI "
-                  "assistant, code-signed installers, an updater and a Windows build verified "
-                  "in CI.</li>"
+                  "<li>CPU disassembly, debugging, binary diff/navigation, a plugin runtime, "
+                  "code-signed installers, an updater and a Windows build verified in CI.</li>"
                   "</ul>"))});
+
+    topics.append(
+        {QStringLiteral("help.codeListing"), QStringLiteral("Readable listings (Code tab)"),
+         QStringLiteral("Disassemble bytes into editable text and assemble them back."),
+         page(QStringLiteral("Readable listings"),
+              QStringLiteral(
+                  "<p>The <b>Code</b> tab shows the file as an editable listing:</p>"
+                  "<pre>00000000  7F 45 4C 46 02 01 01 00  |.ELF....|"
+                  "\n00000008  00 00 00 00 00 00 00 00  |........|</pre>"
+                  "<p>Offset, hex bytes and printable ASCII. Edit the hex column and press "
+                  "<i>Assemble into file</i>: the text is validated (offsets in range, whole "
+                  "byte pairs) and applied as ordinary undoable edits. Nothing is written "
+                  "until you save, and saving still writes a timestamped backup.</p>"
+                  "<p>It works on any file, including PS4/PSP/PS Vita PKG headers and Android "
+                  "APK/ZIP containers, because it does not depend on the container. It is a "
+                  "<b>byte listing, not a CPU disassembler</b>: machine instructions are not "
+                  "decoded, payloads are not decrypted or decompressed, signatures are not "
+                  "rebuilt, and the file length cannot change.</p>"
+                  "<p>Listings cover the first 256 KiB. Use them only on files you own or are "
+                  "authorized to modify; see <i>Help &rarr; Terms of use</i>.</p>"))});
+
+    topics.append(
+        {QStringLiteral("help.ai"), QStringLiteral("AI assistant"),
+         QStringLiteral("Connect a local model, ask about a file and apply its byte edits."),
+         page(QStringLiteral("AI assistant (local endpoint)"),
+              QStringLiteral(
+                  "<p><b>Tools &rarr; AI assistant</b> (Ctrl+Shift+I) talks to an "
+                  "OpenAI-compatible <code>/chat/completions</code> endpoint that you choose. "
+                  "The default is a model on this computer, for example Ollama or LM Studio "
+                  "at <code>http://127.0.0.1:11434/v1</code>. PKG Studio ships no key and has "
+                  "no relay: if the endpoint is loopback, nothing leaves the machine.</p>"
+                  "<h3>Setup</h3>"
+                  "<ol><li>Tick <i>Enable the assistant</i>.</li>"
+                  "<li>Enter the endpoint base URL and the model name.</li>"
+                  "<li>Add an API key only if your endpoint requires one. It is stored in "
+                  "<code>ai.key</code> in the application data folder, readable only by your "
+                  "account, and is never logged. <i>Forget key</i> deletes it.</li></ol>"
+                  "<h3>Asking</h3>"
+                  "<p>With <i>include the open file's readable listing</i> on, each prompt "
+                  "carries the first 8 KiB of the open file as offsets, hex and ASCII. The "
+                  "assistant answers in the chat.</p>"
+                  "<h3>Applying edits</h3>"
+                  "<p>When a reply contains a <code>pkgstudio-edit</code> block (or bare "
+                  "<code>OFFSET  HEX BYTES</code> lines), the dialog counts the bytes and "
+                  "enables <i>Apply edits to file</i>. Applied edits are bounded to the file, "
+                  "stay in memory and can be undone with Ctrl+Z until you save.</p>"
+                  "<p><b>Replies can be wrong.</b> Review the diff in the hex view before "
+                  "saving, and do not send secrets or files you may not share to a remote "
+                  "endpoint.</p>"))});
+
+    topics.append(
+        {QStringLiteral("help.privacy"), QStringLiteral("Privacy policy"),
+         QStringLiteral("What is stored locally and what the AI endpoint receives."),
+         page(QStringLiteral("Privacy policy"),
+              QStringLiteral(
+                  "<p>PKG Studio is local. There is no account, no telemetry, no analytics "
+                  "and no crash-reporting service. The authors receive nothing.</p>"
+                  "<h3>Stored on this computer</h3>"
+                  "<ul>"
+                  "<li><code>pkgstudio.db</code>: settings, recent files, session and parser "
+                  "cache (path and size/timestamp, not contents).</li>"
+                  "<li><code>logs/</code>: diagnostics and crash traces. No file contents.</li>"
+                  "<li><code>themes/</code>: saved themes and copied background images.</li>"
+                  "<li><code>ai.key</code>: your optional endpoint key, owner read/write, not "
+                  "encrypted.</li>"
+                  "<li>Timestamped <code>*.pkgstudio-backup-*.bak</code> files next to files "
+                  "you save.</li>"
+                  "</ul>"
+                  "<h3>AI requests</h3>"
+                  "<p>Only sent to the endpoint you configure, only when you press Send: your "
+                  "prompt, the conversation, and (if enabled) the first 8 KiB of the open "
+                  "file's listing. A loopback endpoint keeps it on this machine; a remote "
+                  "endpoint is governed by its own policy.</p>"
+                  "<h3>Deleting it</h3>"
+                  "<p>Delete the application data folder, or use <i>Forget key</i> for the "
+                  "key alone. Nothing else needs an account to be removed.</p>"
+                  "<p>The full text is in <code>PRIVACY.md</code> next to the application.</p>"))});
+
+    topics.append(
+        {QStringLiteral("help.terms"), QStringLiteral("Terms of use"),
+         QStringLiteral("Authorized use, AI responsibility, piracy and warranty."),
+         page(QStringLiteral("Terms of use"),
+              QStringLiteral(
+                  "<p><b>Authorized use only.</b> Use PKG Studio on files you own or may "
+                  "legally inspect and modify. Do not use it to bypass DRM, console "
+                  "security, signing or copy protection, or to handle content you have no "
+                  "rights to. Lawfulness of modification depends on your jurisdiction and "
+                  "the package licence; that call is yours.</p>"
+                  "<p><b>Honest limits.</b> The Code tab lists bytes, not CPU instructions. "
+                  "Payloads are not decrypted or decompressed, packages are not re-signed, "
+                  "and PS5 PKG parsing is not implemented.</p>"
+                  "<p><b>AI edits are proposals.</b> You configure the endpoint, you review "
+                  "the edits, you save them. The authors are not responsible for a model's "
+                  "output or for a package that stops working after a change.</p>"
+                  "<p><b>Copies.</b> Distributing PKG Studio or modified builds without "
+                  "written permission is prohibited. Unauthorized copies are pirated copies; "
+                  "identified cases may be reported to hosting providers, platforms or "
+                  "authorities and pursued as described in the licence.</p>"
+                  "<p><b>No warranty.</b> This is a development build provided as is. Back up "
+                  "before saving. The full text is in <code>TERMS.md</code> and "
+                  "<code>LICENSE</code>.</p>"))});
 
     topics.append(
         {QStringLiteral("help.limitations"), QStringLiteral("Limitations and honest scope"),
@@ -166,8 +270,8 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
                   "bounds, but never presented as proof of conformance.</li>"
                   "<li>Hex editing cannot insert or delete bytes yet. Replace requires the same "
                   "length.</li>"
-                  "<li>There is no disassembler, debugger, AI assistant, plugin runtime or "
-                  "installer yet.</li>"
+                  "<li>There is no CPU disassembler, debugger, plugin runtime or signed "
+                  "installer yet. The Code tab is a byte listing, not instruction decoding.</li>"
                   "<li>Compressed or encrypted payloads are not extracted. Do not use PKG Studio "
                   "to bypass DRM or console security.</li>"
                   "<li>Analysis and caching are local; there is no telemetry and no upload.</li>"

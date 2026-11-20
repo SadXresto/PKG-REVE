@@ -9,6 +9,7 @@
 #include <QFutureWatcher>
 #include <QHash>
 #include <QMainWindow>
+#include <QPixmap>
 #include <QPointer>
 
 #include <functional>
@@ -52,11 +53,16 @@ public:
     /// Diagnostic/screenshot helper: opens the structure builder with the
     /// built-in example that matches the current analysis kind.
     bool showStructureForCurrentEditor();
+    /// Diagnostic/screenshot helper for the readable listing tab.
+    bool showCodeTabForCurrentEditor();
     void openProject(const QString& path);
     void showWelcome();
     void showSettings();
     void showCommandPalette();
     void showThemeEditor();
+    void showAiAssistant();
+    void chooseThemeBackground();
+    void clearThemeBackground();
 
     void restoreSession();
     void saveSession();
@@ -70,6 +76,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
 
@@ -165,6 +172,8 @@ private:
     QString m_lastDirectory;
     QString m_samplesPath;
     QPointer<FileEditor> m_pendingAnalysisFocus;
+    QPixmap m_wallpaper;
+    QString m_wallpaperPath;
 };
 
 }  // namespace pkg::ui

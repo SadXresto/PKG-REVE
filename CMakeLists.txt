@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(PKGStudio
-    VERSION 0.6.0
+    VERSION 0.7.0
     DESCRIPTION "Package analysis and reverse-engineering IDE"
     LANGUAGES CXX)
 
@@ -25,7 +25,7 @@ option(PKGSTUDIO_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 # ---------------------------------------------------------------------------
 # Toolchain requirements
 # ---------------------------------------------------------------------------
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Concurrent Sql)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Concurrent Sql Network)
 
 qt_standard_project_setup()
 

@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QSplitter>
@@ -203,6 +204,70 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
     m_tabs->addTab(m_infoView, QStringLiteral("Analysis"));
     connect(m_infoView, &PackageInfoView::exportRequested, this,
             &FileEditor::analysisExportRequested);
+
+    // Code tab: a readable listing that can be edited and assembled back. It
+    // works for any file, including PS4/PSP/Vita PKG headers and APK/ZIP
+    // containers; it does not decode CPU instructions.
+    auto* codePage = new QWidget(m_tabs);
+    auto* codeLayout = new QVBoxLayout(codePage);
+    codeLayout->setContentsMargins(0, 0, 0, 0);
+    codeLayout->setSpacing(0);
+
+    auto* codeBar = new QWidget(codePage);
+    codeBar->setObjectName(QStringLiteral("fileEditorHeader"));
+    auto* codeBarLayout = new QHBoxLayout(codeBar);
+    codeBarLayout->setContentsMargins(8, 4, 8, 4);
+    codeBarLayout->setSpacing(8);
+    auto* codeHint =
+        new QLabel(QStringLiteral("Readable listing \u2014 edit the hex column, then assemble."),
+                   codeBar);
+    codeHint->setObjectName(QStringLiteral("hintLabel"));
+    codeBarLayout->addWidget(codeHint, 1);
+
+    auto* reload = makeBarButton(QStringLiteral("Reload listing"),
+                                 QStringLiteral("Rebuild the listing from the file"), codeBar);
+    codeBarLayout->addWidget(reload);
+    auto* assemble = makeBarButton(
+        QStringLiteral("Assemble into file"),
+        QStringLiteral("Apply the listing as undoable byte edits. Nothing is written to "
+                       "disk until you save."),
+        codeBar);
+    assemble->setObjectName(QStringLiteral("editToggle"));
+    codeBarLayout->addWidget(assemble);
+    m_listingStatus = new QLabel(codeBar);
+    m_listingStatus->setObjectName(QStringLiteral("hintLabel"));
+    codeBarLayout->addWidget(m_listingStatus);
+    codeLayout->addWidget(codeBar);
+
+    m_listingEdit = new QPlainTextEdit(codePage);
+    m_listingEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
+    m_listingEdit->setPlaceholderText(
+        QStringLiteral("Reload the listing to disassemble the file, or paste lines such as "
+                       "\"00000010  90 90\" and assemble them into the file."));
+    codeLayout->addWidget(m_listingEdit, 1);
+    m_tabs->addTab(codePage, QStringLiteral("Code"));
+
+    connect(reload, &QToolButton::clicked, this, &FileEditor::refreshCodeListing);
+    connect(assemble, &QToolButton::clicked, this, [this]() {
+        if (m_listingEdit == nullptr || m_document == nullptr)
+            return;
+        auto parsed = parseListing(m_listingEdit->toPlainText(), m_document->size());
+        if (!parsed) {
+            m_listingStatus->setText(parsed.error().detail.isEmpty()
+                                         ? parsed.error().message
+                                         : parsed.error().detail);
+            return;
+        }
+        auto applied = applyByteEdits(parsed.value());
+        if (!applied) {
+            m_listingStatus->setText(applied.error().detail.isEmpty()
+                                         ? applied.error().message
+                                         : applied.error().detail);
+            return;
+        }
+        m_listingStatus->setText(QStringLiteral("%1 byte(s) changed \u2014 unsaved")
+                                     .arg(applied.value()));
+    });
 
     updateTitleLabel();
     m_titleLabel->setToolTip(m_document->path());
@@ -443,6 +508,64 @@ void FileEditor::setAnalysisError(const QString& message)
 void FileEditor::showAnalysisTab()
 {
     m_tabs->setCurrentIndex(1);
+}
+
+QString FileEditor::readableListing(quint64 maxBytes) const
+{
+    if (m_document == nullptr || !m_document->isValid())
+        return {};
+    const quint64 limit = std::min(maxBytes == 0 ? m_document->size() : maxBytes,
+                                   m_document->size());
+    auto listing = buildListing(*m_document, 0, limit, 16,
+                                QStringLiteral("file: %1 (%2 bytes)")
+                                    .arg(m_document->path())
+                                    .arg(m_document->size()));
+    return listing ? listing.value() : QString();
+}
+
+void FileEditor::refreshCodeListing()
+{
+    if (m_listingEdit == nullptr || m_document == nullptr)
+        return;
+    // A quarter of a megabyte is enough to see and patch real headers without
+    // turning a multi-gigabyte package into a giant text document.
+    constexpr quint64 kListingLimit = 256ULL * 1024ULL;
+    const quint64 size = m_document->size();
+    const quint64 limit = std::min(kListingLimit, size);
+    auto listing = buildListing(*m_document, 0, limit, 16,
+                                QStringLiteral("file: %1 (%2 bytes); listing covers %3 of %4 bytes")
+                                    .arg(m_document->path())
+                                    .arg(size)
+                                    .arg(limit)
+                                    .arg(size));
+    if (!listing) {
+        m_listingStatus->setText(listing.error().message);
+        return;
+    }
+    m_listingEdit->setPlainText(listing.value());
+    m_listingStatus->setText(limit < size
+                                 ? QStringLiteral("first %1 bytes (limit)").arg(limit)
+                                 : QStringLiteral("%1 bytes").arg(size));
+}
+
+Result<int> FileEditor::applyByteEdits(const QVector<pkg::ListingEntry>& entries)
+{
+    if (m_document == nullptr)
+        return makeError(QStringLiteral("No document is open"));
+    if (entries.isEmpty())
+        return makeError(QStringLiteral("No byte edits were supplied"));
+    // Edits must stay visible and reversible in the hex view.
+    setEditingEnabled(true);
+    auto applied = applyListing(*m_document, entries);
+    if (!applied)
+        return applied.error();
+    refreshEditState();
+    return applied.value();
+}
+
+void FileEditor::showCodeTab()
+{
+    m_tabs->setCurrentIndex(2);
 }
 
 void FileEditor::showByteInspectorAt(quint64 offset)

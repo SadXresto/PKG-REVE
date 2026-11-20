@@ -67,7 +67,7 @@ mkdir -p "$STAGE/platforms" "$STAGE/sqldrivers" "$STAGE/styles"
 echo "== staging application"
 cp "$BUILD_DIR/PKGStudio.exe" "$STAGE/"
 cp -r samples templates "$STAGE/"
-cp README.md CHANGELOG.md "$STAGE/"
+cp README.md CHANGELOG.md LICENSE TERMS.md PRIVACY.md "$STAGE/"
 
 echo "== staging Qt runtime and plugins"
 for dll in Qt6Core Qt6Gui Qt6Widgets Qt6Sql; do

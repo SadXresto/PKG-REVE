@@ -1,17 +1,21 @@
 # PKG Studio
 
 A lightweight, native desktop IDE for package analysis, metadata inspection and authorized
-binary development. Built with C++20, Qt 6 Widgets and CMake — no Electron, no bundled web
+binary development. Proprietary software: see [LICENSE](LICENSE), [TERMS.md](TERMS.md) and
+[PRIVACY.md](PRIVACY.md). Built with C++20, Qt 6 Widgets and CMake — no Electron, no bundled web
 runtime.
 
 ![PKG Studio with the dark theme](docs/screenshots/theme-dark.png)
 
-**Version 0.6.0 (demo build).** This repository contains a real, running application: the VS Code-style
-shell with the Void Black design system, the SQLite data layer, the format analysis core with
-signature confidence, and a hex workspace with a live byte inspector, signature overlay,
-same-length replace, opt-in editing, undo/redo and backup-on-save. Disassembly, debugging,
-AI, plugins and the installer are *not* present yet; see [docs/ROADMAP.md](docs/ROADMAP.md) for
-the honest status of every phase.
+**Version 0.7.0 (development build).** This repository contains a real, running application: the
+VS Code-style shell with the Void Black design system, the SQLite data layer, the format
+analysis core with signature confidence, and a hex workspace with a live byte inspector,
+signature overlay, same-length replace, opt-in editing, undo/redo and backup-on-save. It also
+has readable byte listings that assemble back into the file, image themes, and an optional AI
+assistant that talks to a local OpenAI-compatible endpoint and proposes byte edits. A CPU
+disassembler, a debugger, a plugin runtime and code-signed installers are *not* present; see
+[docs/ROADMAP.md](docs/ROADMAP.md) for the honest status of every phase, and
+[docs/CODE-LISTING.md](docs/CODE-LISTING.md) for what the Code tab does and does not do.
 
 ## What works today
 
@@ -37,6 +41,20 @@ the honest status of every phase.
 - PS4 PKG: 0x1000-byte container header fields, entry-table bounds checks, explicit warnings
   that payloads are encrypted and are not extracted.
 - Unrecognized files are displayed as raw bytes with an explicit notice, never guessed.
+
+**Code tab and AI**
+- **Readable listings**: the Code tab renders any file as editable `offset  hex  ascii` text
+  and assembles edited text back into the document as undoable byte edits. It works on ELF,
+  PE, ZIP/APK and PSP/Vita/PS4 PKG headers alike, and is explicitly a byte listing, not a CPU
+  disassembler; see [docs/CODE-LISTING.md](docs/CODE-LISTING.md).
+- **Local AI assistant** (`Ctrl+Shift+I`): OpenAI-compatible `/chat/completions` client with a
+  configurable endpoint and model (Ollama, LM Studio, llama.cpp, vLLM or any compatible
+  service). The optional API key is stored in `ai.key` with owner-only permissions and is
+  never logged. Prompts can include the open file's first 8 KiB of listing; replies that
+  contain a `pkgstudio-edit` block enable *Apply edits to file*, which applies validated,
+  undoable byte edits. Nothing is sent anywhere except the endpoint you configure.
+- **Image themes**: any theme can carry a background image with a panel-opacity control; the
+  image is copied into the theme folder so the theme stays self-contained.
 
 **Hex workspace**
 - Custom-painted hex + ASCII view over a memory-mapped file; only a ~256 KiB window is read
