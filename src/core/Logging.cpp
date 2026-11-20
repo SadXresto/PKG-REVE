@@ -27,6 +27,7 @@ struct CrashContext {
 };
 CrashContext g_crashContext{};
 
+#if defined(Q_OS_LINUX)
 void writeAllFd(int fd, const char* text)
 {
     if (fd < 0 || text == nullptr)
@@ -42,7 +43,6 @@ void writeAllFd(int fd, const char* text)
     }
 }
 
-#if defined(Q_OS_LINUX)
 void crashSignalHandler(int signalNumber)
 {
     char body[8192];
@@ -164,6 +164,16 @@ bool Logger::initialize(const QString& logDirectory, LogLevel minLevel, qsizetyp
         return false;
     }
     m_currentFileBytes = QFileInfo(m_logFilePath).size();
+#else
+    // Windows and other platforms log through QFile in writeFileLocked().
+    QFile probe(m_logFilePath);
+    if (!probe.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        m_fileLogging = false;
+        emit logFileProblem(QStringLiteral("Cannot open log file: %1").arg(m_logFilePath));
+        return false;
+    }
+    probe.close();
+    m_currentFileBytes = QFileInfo(m_logFilePath).size();
 #endif
     return true;
 }
@@ -255,6 +265,22 @@ void Logger::writeFileLocked(const LogRecord& record)
     if (::write(m_fileHandle, utf8.constData(), static_cast<std::size_t>(utf8.size())) < 0)
         return;
     m_currentFileBytes += static_cast<qint64>(utf8.size());
+#else
+    QFile file(m_logFilePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append))
+        return;
+    const QString line = QStringLiteral("%1 [%2] [%3] %4\n")
+                             .arg(record.timestamp.toString(Qt::ISODateWithMs),
+                                  levelName(record.level).leftJustified(5),
+                                  record.category, record.message);
+    const QByteArray utf8 = line.toUtf8();
+    const qint64 written = file.write(utf8);
+    file.close();
+    if (written < 0)
+        return;
+    m_currentFileBytes += written;
+    if (m_currentFileBytes >= m_maxFileBytes)
+        rotateIfNeededLocked();
 #endif
 }
 

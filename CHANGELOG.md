@@ -8,6 +8,15 @@ versioning once a public release exists.
 
 ### Added
 
+- **Cross-built Windows x64 demo**: `packaging/windows/build-windows-cross.sh` builds
+  `PKGStudio.exe` on Linux with MinGW-w64 gcc 13 and the official Qt 6.8.3 `mingw_64`
+  binaries, stages the Qt runtime, plugins, MinGW runtime and samples, and produces a
+  portable ZIP, an NSIS installer and `SHA256SUMS.txt` without a Windows host.
+  `packaging/windows/PKGStudio.nsi` installs per user under
+  `%LOCALAPPDATA%\Programs\PKG Studio` (no admin) with Start Menu shortcuts and an
+  uninstall entry, using the `amd64-unicode` stub. Verified under Wine 10 only: self-test
+  passes for the portable and installed copies (ELF and PE samples), and install and
+  uninstall leave no folder, shortcut or registry key behind. Not run on real Windows.
 - **Windows release workflow**: `.github/workflows/windows-release.yml` is a manual
   (`workflow_dispatch`) pipeline on `windows-2022` that generates the demo samples, builds
   the MSVC x64 app against Qt 6.8.3, stages the Qt runtime and plugins, bundles Microsoft's
@@ -34,6 +43,13 @@ versioning once a public release exists.
   `ui/AboutDialog.*` so it can be built without a main window.
 - `tests/test_dialogs.cpp` covers the About and Feature status contents and asserts that both
   dialogs render to non-blank images.
+
+### Fixed
+
+- **File logging on Windows**: `src/core/Logging.cpp` used POSIX `open`/`write`/`flock`
+  unconditionally, so the Windows build wrote no log at all. The POSIX path is now guarded
+  by `Q_OS_LINUX` and other platforms append through `QFile` with the same rotation.
+  Verified by the cross-built Windows executable writing `pkgstudio.log` under Wine.
 
 ### Changed
 

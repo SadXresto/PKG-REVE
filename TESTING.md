@@ -61,15 +61,17 @@ RelWithDebInfo unless stated):
 | 8 GiB sparse file: mmap, tail read, row count, search | passed, elapsed below the 1 ms timer resolution, RSS growth ≈ 816 KiB |
 | 3000 random row reads on a 64 MiB file | passed in ~40 ms (test wall time) |
 
-These numbers are for this environment only. No low-end Windows 10 hardware, no real console
-package and no Windows build have been measured yet.
+These numbers are for this environment only. No low-end Windows 10 hardware and no real
+console package have been measured yet. The Windows x64 build was measured only under Wine
+(see the packaging table below), not on real Windows hardware.
 
 ## Packaging verification
 
 | Artifact | Status |
 | --- | --- |
 | Linux portable folder + `.tar.gz` (`scripts/package-portable.sh`) | **verified**: extracted into a temporary folder and run with `env -i` (fresh `HOME`, system `PATH` only) using `--selftest`, plus offscreen screenshots of the Welcome and structure views. Qt, ICU, fontconfig, fonts, the SQLite plugin and the samples are bundled. |
-| Windows x64 installer (`packaging/windows/`) | **not built or tested**: this environment is Linux with no MSVC, Windows Qt kit, Wine or Windows host. `.github/workflows/windows-release.yml` (manual dispatch) builds `PKG-Studio-Setup-x64.exe` on `windows-2022`, installs it, runs the installed application's self-test and dialog captures, uninstalls it, and writes a passed/failed/untested report. That workflow has never been executed from here, so no Windows artifact is claimed as working. Do not publish the EXE as tested until a workflow run is green and `packaging/windows/README.md`'s manual checklist is recorded. |
+| Windows x64 cross build (`packaging/windows/build-windows-cross.sh`) | **built and verified under Wine 10 only**: MinGW-w64 gcc 13 + official Qt 6.8.3 `mingw_64`. Portable copy `--selftest` on `sample.elf` passes (`platform: windows`, 6 parsers, exit 0); NSIS installer `/S` installs under `%LOCALAPPDATA%\Programs\PKG Studio` with shortcuts and the HKCU uninstall key, the installed copy's `--selftest` on `sample.exe` passes, and `Uninstall.exe /S` removes the folder, shortcuts and registry keys. **Not run on real Windows**, not signed, and the interactive UI was not exercised (Wine has no FreeType here, so text rendered as placeholder glyphs). |
+| Windows MSVC/Inno installer (`packaging/windows/`) | **not built or tested**: this environment is Linux with no MSVC or Windows host. `.github/workflows/windows-release.yml` (manual dispatch) builds `PKG-Studio-Setup-x64.exe` on `windows-2022`, installs it, runs the installed application's self-test and dialog captures, uninstalls it, and writes a passed/failed/untested report. That workflow has never been executed from here, so no Windows artifact is claimed as working. Do not publish the EXE as tested until a workflow run is green and `packaging/windows/README.md`'s manual checklist is recorded. |
 
 ## What the suite covers
 

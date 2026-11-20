@@ -18,17 +18,38 @@ This folder builds the Windows demo installer for PKG Studio:
   **not tested** sections.
 - `.github/workflows/windows-release.yml` — the automated pipeline (see below).
 
-## Status: pipeline added, no Windows run observed yet
+## Status: a cross-built x64 demo was produced, verified under Wine only
 
-The development environment for this repository is Linux: no MSVC, MinGW, Windows Qt
-kit, Wine or Windows host. **No Windows EXE has been built, installed or tested here.**
-Everything below describes the pipeline that produces and verifies one; the artifact is
-**untested** until a run of the workflow (or a manual run of the scripts on Windows) has
-completed and its report says so.
+The development environment for this repository is Linux, so the MSVC/Inno pipeline below
+still has not run on a Windows host. To get an installable build without Windows, the
+folder also carries a second, independent path:
 
-A Windows-only release cannot be declared demo-ready from a Linux-only test run. The
-artifact verified in this repository's Linux environment is the portable Linux folder
-made by `scripts/package-portable.sh`.
+- `build-windows-cross.sh` — a reproducible Linux → Windows x64 build. It uses MinGW-w64
+gcc 13 (`x86_64-w64-mingw32-g{cc,++}-posix`), the official Qt 6.8.3
+`mingw_64` binaries with the Linux Qt 6.8.3 kit as `QT_HOST_PATH` for `moc`/`rcc`/`uic`,
+and NSIS 3.10 to build `dist-win/PKGStudio-<version>-win64.zip`,
+`dist-win/PKGStudio-<version>-Setup-x64.exe` and `dist-win/SHA256SUMS.txt`.
+- `PKGStudio.nsi` — NSIS 3 per-user installer (no admin): installs to
+  `%LOCALAPPDATA%\Programs\PKG Studio`, adds Start Menu shortcuts and an uninstall entry
+  under `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\PKGStudio`. Built with
+  `Target amd64-unicode`, so the stub itself is x64 and matches the app's Windows 10/11
+  x64 target.
+
+What was actually verified for the cross-built artifacts (Wine 10.0 on Linux x64):
+
+| Check | Result |
+| --- | --- |
+| Portable ZIP extracted and `PKGStudio.exe --selftest -f samples/sample.elf` | **PASS**, `platform: windows`, all 6 parsers, exit code 0 |
+| `pkgstudio.log` written by the Windows build | written (3.6 KB) after the `Logging.cpp` `QFile` fallback |
+| Installer `/S` | exit 0; files, 3 Start Menu `.lnk` files and the HKCU uninstall key created |
+| Installed app `--selftest -f samples/sample.exe` | **PASS** (PE parser), exit 0, log written |
+| `Uninstall.exe /S` | exit 0; install folder, Start Menu folder and registry keys gone |
+
+Not verified: execution on real Windows 10/11 (only Wine), SmartScreen/signature
+behaviour (the build is unsigned), the interactive UI (Wine had no FreeType, so the one
+captured screenshot shows placeholder glyphs), and the MSVC/Inno pipeline above. Do not
+present either Windows artifact as "tested on Windows" until a real Windows run or a green
+`windows-release.yml` run exists.
 
 ## GitHub Actions: Windows release
 
