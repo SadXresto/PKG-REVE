@@ -62,7 +62,8 @@ cmake --build "$BUILD_DIR" --parallel "$(nproc)"
 
 STAGE="$DIST/PKGStudio-$VERSION-win64"
 rm -rf "$STAGE"
-mkdir -p "$STAGE/platforms" "$STAGE/sqldrivers" "$STAGE/styles"
+mkdir -p "$STAGE/platforms" "$STAGE/sqldrivers" "$STAGE/styles" "$STAGE/tls" \
+    "$STAGE/imageformats"
 
 echo "== staging application"
 cp "$BUILD_DIR/PKGStudio.exe" "$STAGE/"
@@ -70,7 +71,7 @@ cp -r samples templates "$STAGE/"
 cp README.md CHANGELOG.md LICENSE TERMS.md PRIVACY.md "$STAGE/"
 
 echo "== staging Qt runtime and plugins"
-for dll in Qt6Core Qt6Gui Qt6Widgets Qt6Sql; do
+for dll in Qt6Core Qt6Gui Qt6Widgets Qt6Sql Qt6Network; do
     cp "$QT_WIN/bin/$dll.dll" "$STAGE/"
 done
 # MinGW runtime: take it from the compiler that produced the binary so the
@@ -84,14 +85,19 @@ cp "$QT_WIN/plugins/platforms/qoffscreen.dll" "$STAGE/platforms/"
 cp "$QT_WIN/plugins/platforms/qminimal.dll" "$STAGE/platforms/"
 cp "$QT_WIN/plugins/sqldrivers/qsqlite.dll" "$STAGE/sqldrivers/"
 cp "$QT_WIN/plugins/styles/qmodernwindowsstyle.dll" "$STAGE/styles/"
+# TLS backends for the optional AI endpoint (HTTPS) and image formats for theme
+# wallpapers; without them the assistant and JPEG/WebP backgrounds fail at runtime.
+cp "$QT_WIN/plugins/tls/"*.dll "$STAGE/tls/"
+cp "$QT_WIN/plugins/imageformats/"*.dll "$STAGE/imageformats/"
 
 echo "== verifying runtime is complete"
 missing=0
 for required in \
     PKGStudio.exe \
-    Qt6Core.dll Qt6Gui.dll Qt6Widgets.dll Qt6Sql.dll \
+    Qt6Core.dll Qt6Gui.dll Qt6Widgets.dll Qt6Sql.dll Qt6Network.dll \
     libstdc++-6.dll libgcc_s_seh-1.dll libwinpthread-1.dll \
-    platforms/qwindows.dll sqldrivers/qsqlite.dll samples/sample.elf; do
+    platforms/qwindows.dll sqldrivers/qsqlite.dll tls/qschannelbackend.dll \
+    imageformats/qjpeg.dll samples/sample.elf; do
     if [ ! -e "$STAGE/$required" ]; then
         echo "   MISSING: $required"
         missing=1

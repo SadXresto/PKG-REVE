@@ -418,11 +418,14 @@ QString ThemeManager::styleSheet(const Theme& theme)
     }
 
     if (wallpaper) {
-        // Structural containers must not paint an opaque layer over the image
-        // the main window draws underneath them.
+        // Structural containers of the main window must not paint an opaque
+        // layer over the image it draws underneath them. Scoped to the main
+        // window: dialogs keep their normal opaque splitters and stacks.
         sheet.prepend(QStringLiteral(
-            "QWidget#centralHost, QWidget#centralHost > QWidget, QSplitter, "
-            "QStackedWidget { background: transparent; }\n"));
+            "QMainWindow#pkgstudioMainWindow QWidget#centralHost, "
+            "QMainWindow#pkgstudioMainWindow QSplitter, "
+            "QMainWindow#pkgstudioMainWindow QStackedWidget "
+            "{ background: transparent; }\n"));
         QString path = QDir::fromNativeSeparators(theme.backgroundImage);
         path.replace(QLatin1Char('"'), QStringLiteral("%22"));
         sheet.prepend(QStringLiteral("QMainWindow#pkgstudioMainWindow {\n"
