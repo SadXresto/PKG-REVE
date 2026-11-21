@@ -1,5 +1,6 @@
 #include "ai/AiClient.h"
 
+#include "ai/LocalModels.h"
 #include "core/Logging.h"
 #include "data/Database.h"
 #include "data/Settings.h"
@@ -365,30 +366,11 @@ void AiClient::listModels(const AiSettingsValues& settings, const QString& apiKe
             return;
         }
 
-        const QJsonObject object = QJsonDocument::fromJson(body).object();
+        // One parser for both {"data": [...]} and Ollama's {"models": [...]},
+        // shared with the local scan so the two can never disagree.
         QStringList names;
-        const auto addName = [&names](const QJsonValue& value) {
-            QString name;
-            if (value.isString()) {
-                name = value.toString();
-            } else {
-                const QJsonObject entry = value.toObject();
-                name = entry.value(QStringLiteral("id")).toString();
-                if (name.isEmpty())
-                    name = entry.value(QStringLiteral("name")).toString();
-                if (name.isEmpty())
-                    name = entry.value(QStringLiteral("model")).toString();
-            }
-            name = name.trimmed();
-            if (!name.isEmpty() && !names.contains(name))
-                names.append(name);
-        };
-        // OpenAI-compatible servers answer {"data": [...]}; Ollama's native
-        // /api/tags answers {"models": [...]} with a name field.
-        for (const QJsonValue& value : object.value(QStringLiteral("data")).toArray())
-            addName(value);
-        for (const QJsonValue& value : object.value(QStringLiteral("models")).toArray())
-            addName(value);
+        for (const LocalModelInfo& model : modelsFromOllamaApiResponse(body))
+            names.append(model.name);
 
         logInfo(QString::fromLatin1(kLogCategory),
                 QStringLiteral("AI endpoint reported %1 model(s)").arg(names.size()));

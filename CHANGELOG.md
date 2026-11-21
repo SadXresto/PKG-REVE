@@ -4,6 +4,22 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.7.3] - 2026-11-21
+
+### Fixed
+
+- *Find on this computer* no longer looks hung: a local server that answers is read as soon as
+  its body is complete instead of waiting out the per-request timeout, and disconnected mapped
+  network drives are skipped before anything touches them (their first access can block for
+  seconds). A healthy server now answers the scan in milliseconds.
+- The RAM-fit hint shows a real em dash instead of a literal `\u2014` escape.
+
+### Changed
+
+- *List models* and the local scan share one model-list parser, so the two can no longer
+  disagree about names, namespaced tags or sizes. Drive roots are only probed when they exist
+  and are local.
+
 ## [0.7.2] - 2026-11-20
 
 ### Added

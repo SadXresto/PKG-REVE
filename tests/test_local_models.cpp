@@ -147,6 +147,21 @@ TEST(LocalModels, FitHintSeparatesComfortableTightAndTooLarge)
     EXPECT_TRUE(modelFitHint(4 * kGb, 0).isEmpty());
 }
 
+TEST(LocalModels, FitHintDoesNotLeakEscapeSequences)
+{
+    // The em dash must be a real character, not a literal "\\u2014".
+    for (const quint64 size : {13 * kGb, 30 * kGb})
+        EXPECT_FALSE(modelFitHint(size, 16 * kGb).contains(QStringLiteral("\\u")));
+}
+
+TEST(LocalModels, ScannableDriveRootRejectsMissingPaths)
+{
+    EXPECT_FALSE(isScannableDriveRoot(QString()));
+    EXPECT_FALSE(isScannableDriveRoot(QStringLiteral("/this/path/does/not/exist")));
+    EXPECT_TRUE(isScannableDriveRoot(QDir::rootPath()));
+    EXPECT_FALSE(ollamaModelDirectories().isEmpty());
+}
+
 TEST(LocalModels, ChecksTheStandardOllamaFolderOnEveryDrive)
 {
     const QStringList directories = ollamaModelDirectories();
@@ -155,6 +170,9 @@ TEST(LocalModels, ChecksTheStandardOllamaFolderOnEveryDrive)
         EXPECT_TRUE(QDir::isAbsolutePath(directory)) << directory.toStdString();
 
     for (const QFileInfo& drive : QDir::drives()) {
+        // Remote drive roots are deliberately skipped, so only check local ones.
+        if (!isScannableDriveRoot(drive.absoluteFilePath()))
+            continue;
         bool found = false;
         for (const QString& directory : directories) {
             if (directory.startsWith(drive.absoluteFilePath())) {
@@ -190,6 +208,8 @@ TEST(LocalModels, FindsARunningOllamaServerAndItsNamespacedModels)
     }
     ASSERT_TRUE(future.isFinished()) << "the scan did not finish";
     const LocalModelScan scan = future.result();
+    // A healthy answer must not wait out the per-request timeout on every port.
+    EXPECT_LT(timer.elapsed(), 5000) << "the scan waited on completed responses";
     EXPECT_EQ(scan.endpoint, QStringLiteral("http://127.0.0.1:11434/v1"));
     EXPECT_EQ(scan.providerName, QStringLiteral("Ollama"));
     ASSERT_FALSE(scan.models.isEmpty());

@@ -14,6 +14,10 @@
 #include <QStandardPaths>
 #include <QTcpSocket>
 
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#endif
+
 #include <algorithm>
 
 namespace pkg {
@@ -22,9 +26,11 @@ namespace {
 /// Cap on manifest files read per folder, so a huge library cannot turn the
 /// scan into a long disk job.
 constexpr int kMaxManifests = 400;
-/// Per-request budget on a local socket. A closed port fails immediately; this
-/// only bounds a server that accepts the connection and then stalls.
-constexpr int kRequestTimeoutMs = 900;
+/// A closed local port fails in well under a millisecond; these bounds only
+/// cover a server that accepts the connection and then stalls.
+constexpr int kConnectTimeoutMs = 200;
+constexpr int kRequestTimeoutMs = 700;
+constexpr int kPollMs = 25;
 
 struct HttpResponse {
     int status = 0;
@@ -49,12 +55,16 @@ QByteArray dechunked(const QByteArray& data)
     return out;
 }
 
+/// Reads one small HTTP response. It stops as soon as the body is complete
+/// (Content-Length reached, or the final chunk) instead of waiting for the
+/// socket to close, so a healthy server answers in milliseconds rather than in
+/// one request timeout after another.
 HttpResponse httpGet(quint16 port, const QByteArray& path)
 {
     HttpResponse response;
     QTcpSocket socket;
     socket.connectToHost(QHostAddress::LocalHost, port);
-    if (!socket.waitForConnected(200))
+    if (!socket.waitForConnected(kConnectTimeoutMs))
         return response;
 
     socket.write("GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\n"
@@ -62,20 +72,46 @@ HttpResponse httpGet(quint16 port, const QByteArray& path)
     socket.flush();
 
     QByteArray raw;
+    qsizetype headerEnd = -1;
+    bool chunked = false;
+    qint64 contentLength = -1;
     QElapsedTimer timer;
     timer.start();
     while (timer.elapsed() < kRequestTimeoutMs) {
-        if (socket.bytesAvailable() == 0 && !socket.waitForReadyRead(50)) {
+        if (socket.bytesAvailable() == 0 && !socket.waitForReadyRead(kPollMs)) {
             if (socket.state() == QAbstractSocket::UnconnectedState)
                 break;
             continue;
         }
         raw += socket.readAll();
+        if (headerEnd < 0) {
+            headerEnd = raw.indexOf("\r\n\r\n");
+            if (headerEnd < 0)
+                continue;
+            const QByteArray head = raw.left(headerEnd).toLower();
+            const QByteArray lengthHeader = "content-length:";
+            const qsizetype lengthAt = head.indexOf(lengthHeader);
+            if (lengthAt >= 0) {
+                const qsizetype lineEnd = head.indexOf("\r\n", lengthAt);
+                const qsizetype lengthSize =
+                    (lineEnd < 0 ? head.size() : lineEnd) - lengthAt - lengthHeader.size();
+                contentLength = head.mid(lengthAt + lengthHeader.size(), lengthSize)
+                                    .trimmed()
+                                    .toLongLong();
+            }
+            chunked = head.contains("transfer-encoding: chunked");
+        }
+        const QByteArray body = raw.mid(headerEnd + 4);
+        const bool complete =
+            chunked ? body.endsWith("\r\n0\r\n\r\n")
+                    : contentLength >= 0
+                        && static_cast<qint64>(body.size()) >= contentLength;
+        if (complete)
+            break;
     }
     raw += socket.readAll();
     socket.abort();
 
-    const qsizetype headerEnd = raw.indexOf("\r\n\r\n");
     if (headerEnd < 0)
         return response;
 
@@ -118,6 +154,31 @@ quint64 manifestBytes(const QString& path)
     return total;
 }
 
+/// One array of a model-list body. Entries may be plain strings or objects with
+/// an id/name/model field; Ollama's /api/tags also reports a size.
+QVector<LocalModelInfo> modelsFromJsonArray(const QJsonArray& array)
+{
+    QVector<LocalModelInfo> models;
+    for (const QJsonValue& value : array) {
+        quint64 sizeBytes = 0;
+        QString name;
+        if (value.isString()) {
+            name = value.toString();
+        } else {
+            const QJsonObject entry = value.toObject();
+            for (const QString& key :
+                 {QStringLiteral("id"), QStringLiteral("name"), QStringLiteral("model")}) {
+                name = entry.value(key).toString();
+                if (!name.isEmpty())
+                    break;
+            }
+            sizeBytes = static_cast<quint64>(entry.value(QStringLiteral("size")).toDouble());
+        }
+        addModel(models, name, sizeBytes, QStringLiteral("endpoint"));
+    }
+    return models;
+}
+
 struct RespondingServer {
     QString endpoint;
     QString providerName;
@@ -129,32 +190,14 @@ struct RespondingServer {
 
 QVector<LocalModelInfo> modelsFromOllamaApiResponse(const QByteArray& body)
 {
-    QVector<LocalModelInfo> models;
     const QJsonObject object = QJsonDocument::fromJson(body).object();
-
-    const auto readArray = [&models](const QJsonArray& array) {
-        for (const QJsonValue& value : array) {
-            quint64 sizeBytes = 0;
-            QString name;
-            if (value.isString()) {
-                name = value.toString();
-            } else {
-                const QJsonObject entry = value.toObject();
-                name = entry.value(QStringLiteral("id")).toString();
-                if (name.isEmpty())
-                    name = entry.value(QStringLiteral("name")).toString();
-                if (name.isEmpty())
-                    name = entry.value(QStringLiteral("model")).toString();
-                sizeBytes =
-                    static_cast<quint64>(entry.value(QStringLiteral("size")).toDouble());
-            }
-            addModel(models, name, sizeBytes, QStringLiteral("endpoint"));
-        }
-    };
     // Ollama's /api/tags answers {"models": [...]}; OpenAI-compatible servers
     // answer {"data": [...]}. Both are accepted so one parser covers either.
-    readArray(object.value(QStringLiteral("models")).toArray());
-    readArray(object.value(QStringLiteral("data")).toArray());
+    QVector<LocalModelInfo> models =
+        modelsFromJsonArray(object.value(QStringLiteral("models")).toArray());
+    for (const LocalModelInfo& model :
+         modelsFromJsonArray(object.value(QStringLiteral("data")).toArray()))
+        addModel(models, model.name, model.sizeBytes, model.source);
     return models;
 }
 
@@ -200,6 +243,22 @@ QVector<LocalModelInfo> modelsFromOllamaModelDirectory(const QString& modelsDire
     return models;
 }
 
+bool isScannableDriveRoot(const QString& path)
+{
+    if (path.trimmed().isEmpty() || !QFileInfo::exists(path))
+        return false;
+#ifdef Q_OS_WIN
+    // GetDriveTypeW is a local, instant call. It is checked *before* anything
+    // touches the drive, so a disconnected mapped network drive (whose first
+    // probe can block for many seconds) never makes the scan look hung.
+    const QString native = QDir::toNativeSeparators(path);
+    const UINT type = GetDriveTypeW(reinterpret_cast<const wchar_t*>(native.utf16()));
+    if (type == DRIVE_REMOTE || type == DRIVE_NO_ROOT_DIR)
+        return false;
+#endif
+    return true;
+}
+
 QStringList ollamaModelDirectories()
 {
     QStringList directories;
@@ -224,10 +283,13 @@ QStringList ollamaModelDirectories()
     if (!programData.isEmpty())
         add(programData + QStringLiteral("/ollama/models"));
 
-    // Every mounted drive is checked for the same handful of names, so an
-    // Ollama folder on D: or E: is found without walking whole disks.
+    // Every local drive is checked for the same handful of names, so an Ollama
+    // folder on D: or E: is found without walking whole disks. Network drives
+    // are skipped outright.
     for (const QFileInfo& drive : QDir::drives()) {
         const QString root = drive.absoluteFilePath();
+        if (!isScannableDriveRoot(root))
+            continue;
         add(root + QStringLiteral("ollama/models"));
         add(root + QStringLiteral(".ollama/models"));
         add(root + QStringLiteral("Ollama/models"));
@@ -248,9 +310,9 @@ QString modelFitHint(quint64 modelBytes, quint64 ramBytes)
     if (modelBytes * 5 <= ramBytes * 3)
         return QStringLiteral("needs about %1 and fits comfortably in %2").arg(size, memory);
     if (modelBytes * 10 <= ramBytes * 9)
-        return QStringLiteral("needs about %1 of %2 \\u2014 close other apps first")
+        return QStringLiteral("needs about %1 of %2 \u2014 close other apps first")
             .arg(size, memory);
-    return QStringLiteral("needs about %1 but this computer has %2 \\u2014 expect slowdown; a "
+    return QStringLiteral("needs about %1 but this computer has %2 \u2014 expect slowdown; a "
                           "smaller quantisation runs better")
         .arg(size, memory);
 }
@@ -264,17 +326,16 @@ LocalModelScan scanLocalModelServers()
         const char* providerName;
     };
     static const Candidate candidates[] = {
-        {11434, "Ollama"},  {1234, "LM Studio"}, {8080, "llama.cpp server"},
-        {11435, "Ollama"},  {8000, "vLLM"},
+        {11434, "Ollama"},  {11435, "Ollama"}, {1234, "LM Studio"},
+        {8080, "llama.cpp server"},           {8000, "vLLM"},
     };
 
     QVector<RespondingServer> responding;
     for (const Candidate& candidate : candidates) {
-        const QString provider = QString::fromLatin1(candidate.providerName);
         QVector<LocalModelInfo> found;
         bool answered = false;
 
-        // Ollama also has a native tag list that carries names and sizes.
+        // Ollama's native tag list carries exact names and sizes.
         if (candidate.port == 11434 || candidate.port == 11435) {
             const HttpResponse tags = httpGet(candidate.port, "/api/tags");
             answered = tags.status != 0;
@@ -284,32 +345,25 @@ LocalModelScan scanLocalModelServers()
         if (found.isEmpty()) {
             const HttpResponse list = httpGet(candidate.port, "/v1/models");
             answered = answered || list.status != 0;
-            if (list.status == 200) {
-                for (const LocalModelInfo& model :
-                     modelsFromOllamaApiResponse(list.body)) {
-                    addModel(found, model.name, model.sizeBytes, model.source);
-                }
-            }
+            if (list.status == 200)
+                found = modelsFromOllamaApiResponse(list.body);
         }
         if (!answered)
             continue;
 
-        RespondingServer server;
-        server.endpoint =
-            QStringLiteral("http://127.0.0.1:%1/v1").arg(static_cast<int>(candidate.port));
-        server.providerName = provider;
-        server.port = candidate.port;
-        server.models = found;
-        responding.append(server);
+        responding.append(RespondingServer{
+            QStringLiteral("http://127.0.0.1:%1/v1").arg(static_cast<int>(candidate.port)),
+            QString::fromLatin1(candidate.providerName), candidate.port, found});
     }
 
-    if (!responding.isEmpty()) {
-        // Prefer a server that actually has models; otherwise the first answer.
-        auto best = std::max_element(responding.begin(), responding.end(),
-                                     [](const RespondingServer& left,
-                                        const RespondingServer& right) {
-                                         return left.models.size() < right.models.size();
-                                     });
+    // Prefer the first server that actually has models (Ollama is probed
+    // first); otherwise fall back to the first server that answered.
+    const RespondingServer* best = nullptr;
+    for (const RespondingServer& server : responding) {
+        if (best == nullptr || (best->models.isEmpty() && !server.models.isEmpty()))
+            best = &server;
+    }
+    if (best != nullptr) {
         scan.endpoint = best->endpoint;
         scan.providerName = best->providerName;
         scan.models = best->models;
@@ -362,9 +416,9 @@ LocalModelScan scanLocalModelServers()
         } else {
             const QString executable = QStandardPaths::findExecutable(QStringLiteral("ollama"));
             scan.notes << QStringLiteral(
-                              "No local AI server answered on ports 11434 (Ollama), 1234 (LM "
-                              "Studio), 8080 (llama.cpp) or 8000, and no Ollama model folder was "
-                              "found on any drive.");
+                              "No local AI server answered on ports 11434/11435 (Ollama), 1234 "
+                              "(LM Studio), 8080 (llama.cpp) or 8000 (vLLM), and no Ollama model "
+                              "folder was found on any local drive.");
             if (!executable.isEmpty()) {
                 scan.notes << QStringLiteral("Ollama is installed at %1, so starting it should be "
                                              "enough.")
