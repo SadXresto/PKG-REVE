@@ -3,6 +3,7 @@
 #include <QJsonValue>
 
 #include <algorithm>
+#include <cmath>
 
 namespace pkg {
 namespace {
@@ -91,6 +92,23 @@ QColor Theme::color(const QString& role, const QColor& fallback) const
     return value.isValid() ? value : fallback;
 }
 
+double Theme::contrast(const QString& foreground, const QString& background) const
+{
+    const auto luminance = [](const QColor& colour) {
+        const auto channel = [](double value) {
+            return value <= 0.03928 ? value / 12.92
+                                    : std::pow((value + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * channel(colour.redF()) + 0.7152 * channel(colour.greenF()) +
+               0.0722 * channel(colour.blueF());
+    };
+    const double first = luminance(color(foreground));
+    const double second = luminance(color(background));
+    const double lighter = std::max(first, second);
+    const double darker = std::min(first, second);
+    return (lighter + 0.05) / (darker + 0.05);
+}
+
 QJsonObject Theme::toJson() const
 {
     QJsonObject object;
@@ -98,6 +116,8 @@ QJsonObject Theme::toJson() const
     object.insert(QStringLiteral("id"), id);
     object.insert(QStringLiteral("name"), name);
     object.insert(QStringLiteral("author"), author);
+    if (!description.isEmpty())
+        object.insert(QStringLiteral("description"), description);
     object.insert(QStringLiteral("dark"), dark);
     if (!backgroundImage.isEmpty()) {
         object.insert(QStringLiteral("backgroundImage"), backgroundImage);
@@ -124,6 +144,7 @@ Result<Theme> Theme::fromJson(const QJsonObject& object)
     theme.id = object.value(QStringLiteral("id")).toString().trimmed();
     theme.name = object.value(QStringLiteral("name")).toString().trimmed();
     theme.author = object.value(QStringLiteral("author")).toString();
+    theme.description = object.value(QStringLiteral("description")).toString();
     theme.dark = object.value(QStringLiteral("dark")).toBool(true);
     theme.backgroundImage = object.value(QStringLiteral("backgroundImage")).toString().trimmed();
     theme.backgroundOpacity = std::clamp(
@@ -152,6 +173,7 @@ QList<Theme> Theme::builtins()
     dark.id = QStringLiteral("pkgstudio.dark");
     dark.name = QStringLiteral("PKG Studio Dark");
     dark.author = QStringLiteral("PKG Studio");
+    dark.description = QStringLiteral("The balanced default: VS Code style greys with a blue accent.");
     dark.dark = true;
     dark.colors = makeColors({
         {"window", "#1e1e1e"},
@@ -192,6 +214,7 @@ QList<Theme> Theme::builtins()
     light.id = QStringLiteral("pkgstudio.light");
     light.name = QStringLiteral("PKG Studio Light");
     light.author = QStringLiteral("PKG Studio");
+    light.description = QStringLiteral("A bright, high-contrast workspace for daylight use.");
     light.dark = false;
     light.colors = makeColors({
         {"window", "#f3f3f3"},
@@ -232,6 +255,7 @@ QList<Theme> Theme::builtins()
     darcula.id = QStringLiteral("pkgstudio.darcula");
     darcula.name = QStringLiteral("Darcula");
     darcula.author = QStringLiteral("PKG Studio");
+    darcula.description = QStringLiteral("JetBrains inspired warm charcoal with muted syntax colours.");
     darcula.dark = true;
     darcula.colors = makeColors({
         {"window", "#2b2b2b"},
@@ -272,6 +296,7 @@ QList<Theme> Theme::builtins()
     cyberpunk.id = QStringLiteral("pkgstudio.cyberpunk");
     cyberpunk.name = QStringLiteral("Cyberpunk");
     cyberpunk.author = QStringLiteral("PKG Studio");
+    cyberpunk.description = QStringLiteral("Neon magenta and cyan on deep purple. Loud by design.");
     cyberpunk.dark = true;
     cyberpunk.colors = makeColors({
         {"window", "#0a0014"},
@@ -312,6 +337,7 @@ QList<Theme> Theme::builtins()
     voidBlack.id = QStringLiteral("pkgstudio.voidblack");
     voidBlack.name = QStringLiteral("Void Black");
     voidBlack.author = QStringLiteral("PKG Studio");
+    voidBlack.description = QStringLiteral("True black surfaces with a restrained terminal green accent.");
     voidBlack.dark = true;
     voidBlack.colors = makeColors({
         {"window", "#0a0a0a"},
@@ -352,6 +378,7 @@ QList<Theme> Theme::builtins()
     neonHex.id = QStringLiteral("pkgstudio.neonhex");
     neonHex.name = QStringLiteral("Neon Hex");
     neonHex.author = QStringLiteral("PKG Studio");
+    neonHex.description = QStringLiteral("Midnight blue with electric cyan and amber highlights.");
     neonHex.dark = true;
     neonHex.colors = makeColors({
         {"window", "#05060b"},
@@ -387,6 +414,174 @@ QList<Theme> Theme::builtins()
         {"sidebarHeader", "#0b1120"},
     });
     themes << neonHex;
+
+    Theme cyberBlue;
+    cyberBlue.id = QStringLiteral("pkgstudio.cyber.blue");
+    cyberBlue.name = QStringLiteral("Cyber Blue");
+    cyberBlue.author = QStringLiteral("PKG Studio");
+    cyberBlue.description = QStringLiteral(
+        "Deep graphite surfaces with electric blue primaries and cyan secondary accents.");
+    cyberBlue.dark = true;
+    cyberBlue.colors = makeColors({
+        {"window", "#0b0f14"},
+        {"windowText", "#dbe9f4"},
+        {"base", "#0d131a"},
+        {"baseText", "#dbe9f4"},
+        {"alternateBase", "#121b24"},
+        {"button", "#16232f"},
+        {"buttonText", "#e6f3ff"},
+        {"highlight", "#123a5c"},
+        {"highlightedText", "#ffffff"},
+        {"tooltipBase", "#121b24"},
+        {"tooltipText", "#dbe9f4"},
+        {"link", "#38bdf8"},
+        {"border", "#1b3347"},
+        {"panel", "#0f1820"},
+        {"panelText", "#b9d3e6"},
+        {"accent", "#3b82f6"},
+        {"statusBar", "#0c1520"},
+        {"statusBarText", "#9fd3ff"},
+        {"tabActive", "#121b24"},
+        {"tabInactive", "#0b1118"},
+        {"gutter", "#121b24"},
+        {"hexOffset", "#60a5fa"},
+        {"hexBytes", "#dbe9f4"},
+        {"hexAscii", "#22d3ee"},
+        {"hexSelection", "#123a5c"},
+        {"hexSearch", "#1e3a5f"},
+        {"activityBar", "#0b1118"},
+        {"activityBarText", "#93b8d4"},
+        {"inputBackground", "#101a24"},
+        {"inputText", "#e6f3ff"},
+        {"sidebarHeader", "#0f1820"},
+    });
+    themes << cyberBlue;
+
+    Theme bloodCircuit;
+    bloodCircuit.id = QStringLiteral("pkgstudio.blood.circuit");
+    bloodCircuit.name = QStringLiteral("Blood Circuit");
+    bloodCircuit.author = QStringLiteral("PKG Studio");
+    bloodCircuit.description = QStringLiteral(
+        "Near black with controlled crimson accents and dark red selection markers.");
+    bloodCircuit.dark = true;
+    bloodCircuit.colors = makeColors({
+        {"window", "#0a0708"},
+        {"windowText", "#ead9db"},
+        {"base", "#0c0809"},
+        {"baseText", "#ead9db"},
+        {"alternateBase", "#150d0f"},
+        {"button", "#1d1114"},
+        {"buttonText", "#f2e3e5"},
+        {"highlight", "#4a1119"},
+        {"highlightedText", "#fff5f5"},
+        {"tooltipBase", "#150d0f"},
+        {"tooltipText", "#ead9db"},
+        {"link", "#ff5a6e"},
+        {"border", "#3a161c"},
+        {"panel", "#120b0d"},
+        {"panelText", "#d3b6ba"},
+        {"accent", "#dc2626"},
+        {"statusBar", "#140b0d"},
+        {"statusBarText", "#ff8c99"},
+        {"tabActive", "#170e11"},
+        {"tabInactive", "#0b0708"},
+        {"gutter", "#150d0f"},
+        {"hexOffset", "#f87171"},
+        {"hexBytes", "#ead9db"},
+        {"hexAscii", "#ffb4a8"},
+        {"hexSelection", "#4a1119"},
+        {"hexSearch", "#3b1a0d"},
+        {"activityBar", "#0c0809"},
+        {"activityBarText", "#b89196"},
+        {"inputBackground", "#1a1013"},
+        {"inputText", "#f5e6e8"},
+        {"sidebarHeader", "#120b0d"},
+    });
+    themes << bloodCircuit;
+
+    Theme terminalClassic;
+    terminalClassic.id = QStringLiteral("pkgstudio.terminal.classic");
+    terminalClassic.name = QStringLiteral("Terminal Classic");
+    terminalClassic.author = QStringLiteral("PKG Studio");
+    terminalClassic.description = QStringLiteral(
+        "A refined green-phosphor terminal look with modern, readable typography.");
+    terminalClassic.dark = true;
+    terminalClassic.colors = makeColors({
+        {"window", "#05100a"},
+        {"windowText", "#b8f5c8"},
+        {"base", "#06130c"},
+        {"baseText", "#c8ffd4"},
+        {"alternateBase", "#0a1d12"},
+        {"button", "#0d2417"},
+        {"buttonText", "#d8ffe0"},
+        {"highlight", "#14512c"},
+        {"highlightedText", "#eafff0"},
+        {"tooltipBase", "#0a1d12"},
+        {"tooltipText", "#c8ffd4"},
+        {"link", "#57ff9a"},
+        {"border", "#12452a"},
+        {"panel", "#081810"},
+        {"panelText", "#9fd9ae"},
+        {"accent", "#22c55e"},
+        {"statusBar", "#071a10"},
+        {"statusBarText", "#6ef2a1"},
+        {"tabActive", "#0a1d12"},
+        {"tabInactive", "#06110b"},
+        {"gutter", "#0a1d12"},
+        {"hexOffset", "#4ade80"},
+        {"hexBytes", "#c8ffd4"},
+        {"hexAscii", "#e2ff7a"},
+        {"hexSelection", "#14512c"},
+        {"hexSearch", "#2a3d12"},
+        {"activityBar", "#06110b"},
+        {"activityBarText", "#7fb98f"},
+        {"inputBackground", "#0b2014"},
+        {"inputText", "#d8ffe0"},
+        {"sidebarHeader", "#081810"},
+    });
+    themes << terminalClassic;
+
+    Theme arcticDev;
+    arcticDev.id = QStringLiteral("pkgstudio.arctic.dev");
+    arcticDev.name = QStringLiteral("Arctic Dev");
+    arcticDev.author = QStringLiteral("PKG Studio");
+    arcticDev.description = QStringLiteral(
+        "A premium cool-white and slate interface with calm blue accents.");
+    arcticDev.dark = false;
+    arcticDev.colors = makeColors({
+        {"window", "#f6f9fc"},
+        {"windowText", "#1a2733"},
+        {"base", "#ffffff"},
+        {"baseText", "#16212b"},
+        {"alternateBase", "#eef4f9"},
+        {"button", "#e3ecf4"},
+        {"buttonText", "#14202b"},
+        {"highlight", "#cfe6fb"},
+        {"highlightedText", "#0b2a45"},
+        {"tooltipBase", "#ffffff"},
+        {"tooltipText", "#16212b"},
+        {"link", "#0b6bcb"},
+        {"border", "#cfdde9"},
+        {"panel", "#fbfdff"},
+        {"panelText", "#33475b"},
+        {"accent", "#1f74d1"},
+        {"statusBar", "#e7f0f8"},
+        {"statusBarText", "#173a5a"},
+        {"tabActive", "#ffffff"},
+        {"tabInactive", "#eef3f8"},
+        {"gutter", "#eef4f9"},
+        {"hexOffset", "#1f5f9e"},
+        {"hexBytes", "#16212b"},
+        {"hexAscii", "#b23a48"},
+        {"hexSelection", "#cfe6fb"},
+        {"hexSearch", "#ffe9b8"},
+        {"activityBar", "#eaf1f7"},
+        {"activityBarText", "#2e4a63"},
+        {"inputBackground", "#ffffff"},
+        {"inputText", "#16212b"},
+        {"sidebarHeader", "#f1f6fa"},
+    });
+    themes << arcticDev;
 
     return themes;
 }

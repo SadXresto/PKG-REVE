@@ -16,6 +16,8 @@ struct Theme {
     QString id;
     QString name;
     QString author;
+    /// One line shown in the theme picker and settings center.
+    QString description;
     bool dark = true;
     int schemaVersion = 1;
     QHash<QString, QColor> colors;
@@ -34,6 +36,8 @@ struct Theme {
 
     [[nodiscard]] bool isValid(QString* reason = nullptr) const;
     [[nodiscard]] QColor color(const QString& role, const QColor& fallback = {}) const;
+    /// WCAG contrast ratio between two roles (1.0 identical, 21.0 black/white).
+    [[nodiscard]] double contrast(const QString& foreground, const QString& background) const;
     [[nodiscard]] QJsonObject toJson() const;
     [[nodiscard]] static Result<Theme> fromJson(const QJsonObject& object);
     /// Built-in themes; always available even without a data directory.

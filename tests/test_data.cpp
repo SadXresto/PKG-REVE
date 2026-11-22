@@ -250,6 +250,50 @@ TEST(ThemeTest, VoidBlackIsTheDefaultPalette)
     EXPECT_EQ(ThemeManager::instance().fallback().id, QStringLiteral("pkgstudio.voidblack"));
 }
 
+TEST(ThemeTest, ApexThemeCollectionIsComplete)
+{
+    const QList<Theme> themes = Theme::builtins();
+    const QStringList expected = {
+        QStringLiteral("pkgstudio.cyber.blue"),
+        QStringLiteral("pkgstudio.blood.circuit"),
+        QStringLiteral("pkgstudio.terminal.classic"),
+        QStringLiteral("pkgstudio.arctic.dev"),
+    };
+    for (const QString& id : expected) {
+        const auto it = std::find_if(themes.begin(), themes.end(), [&id](const Theme& theme) {
+            return theme.id == id;
+        });
+        ASSERT_NE(it, themes.end()) << id.toStdString();
+        EXPECT_FALSE(it->description.trimmed().isEmpty()) << id.toStdString();
+        EXPECT_GE(it->contrast(QStringLiteral("baseText"), QStringLiteral("base")), 7.0)
+            << id.toStdString();
+        EXPECT_GE(it->contrast(QStringLiteral("panelText"), QStringLiteral("panel")), 4.5)
+            << id.toStdString();
+        EXPECT_GE(it->contrast(QStringLiteral("windowText"), QStringLiteral("window")), 7.0)
+            << id.toStdString();
+    }
+
+    // Every built-in theme must be describable and stay readable.
+    for (const Theme& theme : themes) {
+        EXPECT_FALSE(theme.description.trimmed().isEmpty()) << theme.id.toStdString();
+        EXPECT_GE(theme.contrast(QStringLiteral("baseText"), QStringLiteral("base")), 4.5)
+            << theme.id.toStdString();
+        EXPECT_GE(theme.contrast(QStringLiteral("hexBytes"), QStringLiteral("base")), 4.5)
+            << theme.id.toStdString();
+    }
+
+    EXPECT_FALSE(themes.first().colors.isEmpty());
+}
+
+TEST(ThemeTest, ThemeDescriptionSurvivesJsonRoundTrip)
+{
+    Theme theme = Theme::builtins().first();
+    theme.description = QStringLiteral("Round trip description");
+    const auto restored = Theme::fromJson(theme.toJson());
+    ASSERT_TRUE(restored);
+    EXPECT_EQ(restored.value().description, theme.description);
+}
+
 TEST(ThemeTest, JsonRoundTripAndValidation)
 {
     Theme dark = Theme::builtins().first();
