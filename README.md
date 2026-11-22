@@ -54,6 +54,13 @@ disassembler, a debugger, a plugin runtime and code-signed installers are *not* 
   dependency sections with recommendations derived only from the parsed build files and the
   API scan, each citing its evidence; absent evidence is reported as absent.
 
+The bundled `samples/gameforge-demo` project exercises all of the above: two CMake targets,
+a declared SDL2/OpenGL dependency, undeclared link names (`d3d11`, `xinput`, `pthread`), platform
+conditions and Win32/D3D source. It is synthetic and is not buildable without SDL2 installed;
+see [its README](samples/gameforge-demo/README.md).
+
+![GameForge dependency graph for the bundled NeonDrift demo project](docs/screenshots/gameforge-graph.png)
+
 **Analysis core**
 - Signature-based parser registry with a raw-bytes fallback and honest warnings for
   unrecognized input.
@@ -214,16 +221,25 @@ details, Windows instructions and all CMake options.
 ./build/src/PKGStudio -p samples -f samples/sample_ps4.pkg
 ./build/src/PKGStudio --theme pkgstudio.cyberpunk
 ./build/src/PKGStudio --selftest -f samples/sample.elf   # headless startup check
+./build/src/PKGStudio -p samples/gameforge-demo          # GameForge demo project
 ```
 
 Generate the synthetic test corpus with `python3 tools/make_test_packages.py`. The samples are
 self-created fixtures, not commercial packages.
 
 Diagnostic CLI options: `--screenshot <path>` (render the window and exit),
-`--screenshot-tab hex|analysis|inspector|structure`, and
+`--screenshot-tab hex|analysis|inspector|structure|code|chat|gameforge`, and
 `--screenshot-dialog about|feature-status` to capture the About or Feature status dialog instead
-of the main window. These exist so the same startup path can be verified headlessly and are also
-what produced the images in `docs/screenshots/`.
+of the main window. A `gameforge` capture waits for the real background scan and analysis to
+finish, and `--screenshot-gameforge-tab inventory|graph|config|portability|intel` selects the
+tab. These exist so the same startup path can be verified headlessly and are also what produced
+the images in `docs/screenshots/`, for example:
+
+```bash
+QT_QPA_PLATFORM=offscreen ./build/src/PKGStudio -p samples/gameforge-demo \
+    --screenshot docs/screenshots/gameforge-graph.png \
+    --screenshot-tab gameforge --screenshot-gameforge-tab graph
+```
 
 ## Data locations
 

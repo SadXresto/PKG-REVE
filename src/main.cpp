@@ -120,6 +120,11 @@ int main(int argc, char* argv[])
         QStringLiteral("View to show in the diagnostic screenshot: hex, analysis, code, "
                        "inspector, structure or chat."),
         QStringLiteral("tab"));
+    const QCommandLineOption screenshotGameForgeOption(
+        QStringLiteral("screenshot-gameforge-tab"),
+        QStringLiteral("Tab to show in a --screenshot-tab gameforge capture: inventory, "
+                       "graph, config, portability or intel."),
+        QStringLiteral("tab"));
     const QCommandLineOption screenshotDialogOption(
         QStringLiteral("screenshot-dialog"),
         QStringLiteral("Capture a dialog instead of the main window: about, "
@@ -134,6 +139,7 @@ int main(int argc, char* argv[])
     parser.addOption(themeOption);
     parser.addOption(screenshotOption);
     parser.addOption(screenshotTabOption);
+    parser.addOption(screenshotGameForgeOption);
     parser.addOption(screenshotDialogOption);
     parser.addOption(selfTestOption);
     parser.process(app);
@@ -146,6 +152,7 @@ int main(int argc, char* argv[])
     options.themeId = parser.value(themeOption);
     options.screenshotPath = parser.value(screenshotOption);
     options.screenshotTab = parser.value(screenshotTabOption);
+    options.screenshotGameForgeTab = parser.value(screenshotGameForgeOption);
     options.screenshotDialog = parser.value(screenshotDialogOption);
     options.selfTest = parser.isSet(selfTestOption);
 

@@ -365,6 +365,27 @@ void GameForgePanel::clearProject()
     updateSummary();
 }
 
+QString GameForgePanel::selectTab(const QString& id)
+{
+    if (m_tabs == nullptr)
+        return {};
+    int index = -1;
+    if (id.isEmpty() || id == QLatin1String("graph"))
+        index = 1;
+    else if (id == QLatin1String("inventory"))
+        index = 0;
+    else if (id == QLatin1String("config") || id == QLatin1String("build"))
+        index = 2;
+    else if (id == QLatin1String("portability"))
+        index = 3;
+    else if (id == QLatin1String("intel") || id == QLatin1String("porting"))
+        index = 4;
+    if (index < 0 || index >= m_tabs->count())
+        return {};
+    m_tabs->setCurrentIndex(index);
+    return m_tabs->tabText(index);
+}
+
 void GameForgePanel::rescan()
 {
     if (m_root.isEmpty()) {
@@ -503,6 +524,9 @@ void GameForgePanel::onAnalysisFinished()
         return;
     m_analysis = m_analysisWatcher->result();
     setBusy(false, QString());
+    // setBusy() only replaces the summary while busy, so restore the scanned
+    // project summary now that the analysis text no longer applies.
+    updateSummary();
     populateGraphTab();
     populateBuildTab();
     populatePortabilityTab();
@@ -754,12 +778,16 @@ void GameForgePanel::updateSummary()
         m_warnings->clear();
         return;
     }
-    QString summary = QStringLiteral("%1 \u00b7 %2 \u00b7 %3 files in %4 folders \u00b7 %5")
-                          .arg(m_scan.displayName,
-                               gameforge::projectKindName(m_scan.kind))
-                          .arg(m_scan.fileCount())
-                          .arg(m_scan.directoryCount)
-                          .arg(sizeText(m_scan.totalBytes));
+    const int fileCount = m_scan.fileCount();
+    const int directoryCount = m_scan.directoryCount;
+    QString summary =
+        QStringLiteral("%1 \u00b7 %2 \u00b7 %3 %4 in %5 %6 \u00b7 %7")
+            .arg(m_scan.displayName, gameforge::projectKindName(m_scan.kind))
+            .arg(fileCount)
+            .arg(fileCount == 1 ? QStringLiteral("file") : QStringLiteral("files"))
+            .arg(directoryCount)
+            .arg(directoryCount == 1 ? QStringLiteral("folder") : QStringLiteral("folders"))
+            .arg(sizeText(m_scan.totalBytes));
     if (!m_scan.kindEvidence.isEmpty())
         summary += QStringLiteral(" \u00b7 marker: %1").arg(m_scan.kindEvidence);
     if (m_scan.truncated || m_scan.cancelled)

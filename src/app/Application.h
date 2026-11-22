@@ -21,6 +21,9 @@ struct StartupOptions {
     QString themeId;
     QString screenshotPath;
     QString screenshotTab;
+    /// With --screenshot-tab gameforge: which workspace tab to show
+    /// (inventory, graph, config, portability or intel; graph is the default).
+    QString screenshotGameForgeTab;
     /// With --screenshot: capture a dialog instead of the main window
     /// ("about" or "feature-status").
     QString screenshotDialog;

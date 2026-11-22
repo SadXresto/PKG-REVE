@@ -1,10 +1,17 @@
 # PKG Studio sample workspace
 
-Every file in this folder is generated from scratch by
-[`tools/make_test_packages.py`](../tools/make_test_packages.py). There is no
+Every binary in this folder is generated from scratch by
+[`tools/make_test_packages.py`](../tools/make_test_packages.py); the
+`gameforge-demo` subfolder is a small hand-written CMake project. There is no
 commercial, copyrighted or console-signed content here, and nothing is
 encrypted or extracted. These files exist so the analysis, hex, editing,
 structure and save paths can be demonstrated and tested offline.
+
+`gameforge-demo` is the demo project for the GameForge workspace. Open it with
+`PKGStudio -p samples/gameforge-demo` to see the build-config inspector,
+dependency graph and porting intelligence work on real files. It is synthetic
+and not buildable without SDL2; see
+[`gameforge-demo/README.md`](gameforge-demo/README.md).
 
 Open this folder with **File → Open sample project** (or **Help → Open sample
 workspace**) to show it in the explorer.

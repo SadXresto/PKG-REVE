@@ -58,6 +58,13 @@ public:
     bool showStructureForCurrentEditor();
     /// Diagnostic/screenshot helper for the readable listing tab.
     bool showCodeTabForCurrentEditor();
+    /// Diagnostic/screenshot helper: opens the GameForge workspace, selects a
+    /// tab by id and returns its title (empty for an unknown id).
+    QString showGameForgeWorkspace(const QString& tab);
+    /// True once the GameForge background scan and analysis have a result.
+    [[nodiscard]] bool gameForgeAnalysisReady() const;
+    /// Diagnostic/screenshot helper: sets the left sidebar width in pixels.
+    void setSidebarWidth(int width);
     /// The editor the user is looking at, for panels that follow the selection.
     [[nodiscard]] FileEditor* activeEditor() const;
     void openProject(const QString& path);

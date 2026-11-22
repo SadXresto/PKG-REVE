@@ -1,0 +1,25 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "linux-x64-debug",
+      "displayName": "Linux x64 (Debug)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-x64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-m64 -O0 -g"
+      }
+    },
+    {
+      "name": "windows-x64-release",
+      "displayName": "Windows x64 (Release)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-x64-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS": "/O2 /arch:AVX2"
+      }
+    }
+  ]
+}

@@ -19,8 +19,10 @@ logs/
 crashes/
 *.log
 
-# Generated sample packages (recreate with tools/make_test_packages.py)
-samples/
+# Generated sample packages (recreate with tools/make_test_packages.py). The
+# GameForge demo project is hand-written, so it is committed.
+samples/*
+!samples/gameforge-demo/
 
 # IDE / OS noise
 .vscode/

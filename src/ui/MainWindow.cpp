@@ -1638,6 +1638,33 @@ bool MainWindow::showCodeTabForCurrentEditor()
     return true;
 }
 
+QString MainWindow::showGameForgeWorkspace(const QString& tab)
+{
+    if (m_gameForge == nullptr)
+        return {};
+    const QString title = m_gameForge->selectTab(tab);
+    if (title.isEmpty())
+        return {};
+    switchSidebar(QStringLiteral("gameforge"));
+    if (m_activity != nullptr)
+        m_activity->setCurrent(QStringLiteral("gameforge"));
+    return title;
+}
+
+bool MainWindow::gameForgeAnalysisReady() const
+{
+    return m_gameForge != nullptr && m_gameForge->hasAnalysis();
+}
+
+void MainWindow::setSidebarWidth(int width)
+{
+    if (m_mainSplitter == nullptr || width <= 0)
+        return;
+    const int total = m_mainSplitter->width() > 0 ? m_mainSplitter->width() : 1440;
+    const int rest = total - width;
+    m_mainSplitter->setSizes({width, rest > 0 ? rest : 1});
+}
+
 void MainWindow::showAiAssistant()
 {
     if (m_aiDock == nullptr)

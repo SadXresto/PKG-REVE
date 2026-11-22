@@ -46,6 +46,11 @@ public:
     void setProjectRoot(const QString& path);
     void rescan();
 
+    /// Selects a workspace tab by id (inventory, graph, config, portability or
+    /// intel) and returns its display title, or an empty string when the id is
+    /// unknown. Used by the diagnostic screenshot mode.
+    QString selectTab(const QString& id);
+
     [[nodiscard]] QString projectRoot() const { return m_root; }
     [[nodiscard]] bool isScanning() const;
     [[nodiscard]] bool hasScan() const { return m_scan.readable(); }

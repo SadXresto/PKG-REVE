@@ -4,6 +4,25 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.9.1] - 2026-11-22
+
+### Added
+
+- **`samples/gameforge-demo`**: a small synthetic CMake game project (two targets,
+  declared SDL2/OpenGL dependencies, undeclared `d3d11`/`xinput`/`pthread` link names,
+  platform conditions, `CMakePresets.json` and Win32/D3D source) so the GameForge
+  workspace can be demonstrated and screenshotted from a real project tree.
+- **GameForge screenshot mode**: `--screenshot-tab gameforge` with
+  `--screenshot-gameforge-tab inventory|graph|config|portability|intel` renders the
+  real workspace after its background scan and analysis finish (30 s timeout) and
+  widens the sidebar for a readable graph. Nothing about the panel changes in
+  interactive use.
+
+### Changed
+
+- README documents the GameForge demo and shows a captured dependency graph;
+  version 0.9.1.
+
 ## [0.9.0] - 2026-11-22
 
 ### Added

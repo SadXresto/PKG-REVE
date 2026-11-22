@@ -230,11 +230,62 @@ int Application::run(const StartupOptions& options)
             m_window->showCodeTabForCurrentEditor();
         else if (options.screenshotTab == QLatin1String("chat"))
             m_window->showAiAssistant();
-        else if (!options.screenshotTab.isEmpty() && options.screenshotTab != QLatin1String("hex"))
+        else if (!options.screenshotTab.isEmpty() && options.screenshotTab != QLatin1String("hex")
+                 && options.screenshotTab != QLatin1String("gameforge"))
             logWarning(QString::fromLatin1(kLogCategory),
                        QStringLiteral("Unknown --screenshot-tab '%1'")
                            .arg(options.screenshotTab));
         const QString path = options.screenshotPath;
+
+        // The GameForge workspace scans and analyzes on worker threads, so the
+        // capture waits for the real result instead of guessing a delay. The
+        // sidebar is widened for the capture only: the graph is unreadable at
+        // its 290 px default.
+        if (options.screenshotTab == QLatin1String("gameforge")) {
+            const QString tab = options.screenshotGameForgeTab.isEmpty()
+                                    ? QStringLiteral("graph")
+                                    : options.screenshotGameForgeTab;
+            if (m_window->showGameForgeWorkspace(tab).isEmpty()) {
+                QTextStream(stderr)
+                    << QStringLiteral("Unknown --screenshot-gameforge-tab '%1' (expected "
+                                      "inventory, graph, config, portability or intel)\n")
+                           .arg(tab);
+                return 2;
+            }
+            m_window->setSidebarWidth(760);
+            auto* poll = new QTimer(this);
+            auto waited = std::make_shared<int>(0);
+            poll->setInterval(200);
+            connect(poll, &QTimer::timeout, this, [this, poll, waited, path]() {
+                *waited += poll->interval();
+                if (m_window->gameForgeAnalysisReady() && *waited >= 800) {
+                    poll->stop();
+                    QTimer::singleShot(250, this, [this, path]() {
+                        const QPixmap shot = m_window->grab();
+                        const bool saved = shot.save(path);
+                        if (saved) {
+                            logInfo(QString::fromLatin1(kLogCategory),
+                                    QStringLiteral("Screenshot saved: %1").arg(path));
+                            QTextStream(stdout) << QStringLiteral("screenshot: %1 (%2x%3)\n")
+                                                       .arg(path)
+                                                       .arg(shot.width())
+                                                       .arg(shot.height());
+                        } else {
+                            logError(QString::fromLatin1(kLogCategory),
+                                     QStringLiteral("Cannot save screenshot: %1").arg(path));
+                        }
+                        QCoreApplication::exit(saved ? 0 : 2);
+                    });
+                } else if (*waited >= 30000) {
+                    poll->stop();
+                    QTextStream(stderr)
+                        << QStringLiteral("GameForge analysis did not finish within 30 s\n");
+                    QCoreApplication::exit(2);
+                }
+            });
+            poll->start();
+            return m_app.exec();
+        }
         QTimer::singleShot(1500, this, [this, path]() {
             const QPixmap shot = m_window->grab();
             const bool saved = shot.save(path);
