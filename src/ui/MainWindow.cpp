@@ -52,6 +52,7 @@
 #include <QMimeData>
 #include <QDockWidget>
 #include <QPainter>
+#include <QRadialGradient>
 #include <QPointer>
 #include <QProgressBar>
 #include <QProgressDialog>
@@ -78,6 +79,17 @@ namespace pkg::ui {
 namespace {
 
 constexpr auto kLogCategory = "ui";
+
+/// Blends two colours; `amount` 0 keeps `from`, 1 returns `to`.
+QColor blendColours(const QColor& from, const QColor& to, double amount)
+{
+    const double t = std::clamp(amount, 0.0, 1.0);
+    const auto channel = [t](int a, int b) {
+        return static_cast<int>(std::lround(static_cast<double>(a) + (b - a) * t));
+    };
+    return QColor(channel(from.red(), to.red()), channel(from.green(), to.green()),
+                  channel(from.blue(), to.blue()));
+}
 
 QString keySequenceText(const QKeySequence& sequence)
 {
@@ -2096,8 +2108,26 @@ void MainWindow::paintEvent(QPaintEvent* event)
     // A theme wallpaper is painted behind everything; panel colours are
     // translucent (see ThemeManager::styleSheet) so the image shows through.
     const Theme& theme = ThemeManager::instance().current();
-    if (theme.backgroundImage.isEmpty())
+    if (theme.backgroundImage.isEmpty()) {
+        // No wallpaper: a soft accent bloom in the top-left corner fading into
+        // a darker far edge. The same translucent panels then read as glass
+        // instead of as flat boxes.
+        const QColor window = theme.color(QStringLiteral("window"));
+        const QColor accent = theme.color(QStringLiteral("accent"));
+        const QColor glow = blendColours(window, accent, theme.dark ? 0.16 : 0.18);
+        const QColor deep = blendColours(window,
+                                         theme.dark ? QColor(0, 0, 0) : QColor(255, 255, 255),
+                                         theme.dark ? 0.50 : 0.60);
+        QRadialGradient gradient(
+            QPointF(width() * 0.15, 0.0),
+            static_cast<qreal>(std::max(width(), height())) * 1.25);
+        gradient.setColorAt(0.0, glow);
+        gradient.setColorAt(0.45, window);
+        gradient.setColorAt(1.0, deep);
+        QPainter painter(this);
+        painter.fillRect(rect(), gradient);
         return;
+    }
     if (m_wallpaperPath != theme.backgroundImage) {
         m_wallpaperPath = theme.backgroundImage;
         m_wallpaper = QPixmap(theme.backgroundImage);

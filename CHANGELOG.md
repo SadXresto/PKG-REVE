@@ -4,6 +4,17 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.7.4] - 2026-11-22
+
+### Changed
+
+- **Glass UI**: panels, toolbars, buttons, inputs, tabs and menus are now translucent
+  surfaces over a soft accent gradient that glows from the top-left corner, with rounded
+  corners and hairline edges. The effect is generated from the active theme's colours, so
+  every built-in and user theme picks it up; a wallpaper still replaces the gradient.
+- Scrollbars are slimmer and translucent, and the status bar keeps its own theme colour
+  instead of borrowing the activity bar's.
+
 ## [0.7.3] - 2026-11-21
 
 ### Fixed

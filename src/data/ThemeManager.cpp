@@ -13,128 +13,172 @@
 #include <QStyleFactory>
 
 #include <algorithm>
+#include <cmath>
 
 namespace pkg {
 namespace {
 
 constexpr auto kLogCategory = "theme";
 
+/// Blends two colours; `amount` 0 keeps `from`, 1 returns `to`.
+QColor blend(const QColor& from, const QColor& to, double amount)
+{
+    const double t = std::clamp(amount, 0.0, 1.0);
+    const auto channel = [t](int a, int b) {
+        return static_cast<int>(std::lround(static_cast<double>(a) + (b - a) * t));
+    };
+    return QColor(channel(from.red(), to.red()), channel(from.green(), to.green()),
+                  channel(from.blue(), to.blue()));
+}
+
+/// Primary-tinted glass: `colour` at `alphaPercent` of opacity.
+QString glass(const QColor& colour, int alphaPercent)
+{
+    return QStringLiteral("rgba(%1, %2, %3, %4%)")
+        .arg(colour.red())
+        .arg(colour.green())
+        .arg(colour.blue())
+        .arg(std::clamp(alphaPercent, 0, 100));
+}
+
 QString sheetTemplate()
 {
-    // @role tokens are replaced with the active theme's colours.
+    // @token placeholders are replaced with the active theme's colours and the
+    // generated glass values (translucent surfaces, hairlines, glow).
     return QStringLiteral(R"(
 QWidget {
     background-color: @window;
     color: @windowText;
 }
-QMainWindow::separator { background: @border; width: 1px; height: 1px; }
-QMenuBar { background-color: @panel; color: @panelText; border-bottom: 1px solid @border; }
-QMenuBar::item { padding: 4px 10px; background: transparent; }
-QMenuBar::item:selected { background-color: @highlight; color: @highlightedText; }
-QMenu { background-color: @panel; color: @panelText; border: 1px solid @border; padding: 4px; }
-QMenu::item { padding: 5px 24px 5px 20px; }
-QMenu::item:selected { background-color: @highlight; color: @highlightedText; }
-QMenu::separator { height: 1px; background: @border; margin: 4px 6px; }
-QToolTip { background-color: @tooltipBase; color: @tooltipText; border: 1px solid @border; padding: 3px; }
+QMainWindow#pkgstudioMainWindow { background-color: @window; }
+QMainWindow::separator { background: @edge; width: 1px; height: 1px; }
+QMenuBar { background-color: transparent; color: @panelText; border-bottom: 1px solid @edge; padding: 2px; }
+QMenuBar::item { padding: 4px 10px; background: transparent; border-radius: 5px; }
+QMenuBar::item:selected { background-color: @glassButton; color: @highlightedText; }
+QMenu { background-color: @glassPanel; color: @panelText; border: 1px solid @edge; padding: 6px; }
+QMenu::item { padding: 5px 24px 5px 20px; border-radius: 5px; }
+QMenu::item:selected { background-color: @accentWash; color: @highlightedText; }
+QMenu::separator { height: 1px; background: @edge; margin: 4px 6px; }
+QToolTip { background-color: @glassPanel; color: @tooltipText; border: 1px solid @edge; padding: 4px; }
 
-QWidget#activityBar { background-color: @activityBar; border-right: 1px solid @border; }
+QWidget#activityBar { background-color: @glassBar; border-right: 1px solid @edge; }
 QToolButton#activityButton {
     background: transparent; color: @activityBarText; border: none;
-    border-left: 2px solid transparent; padding: 6px; margin: 2px 0;
+    border-radius: 9px; padding: 6px; margin: 3px 6px;
 }
-QToolButton#activityButton:hover { background-color: @panel; }
-QToolButton#activityButton:checked { border-left: 2px solid @accent; background-color: @panel; }
+QToolButton#activityButton:hover { background-color: @glassButton; }
+QToolButton#activityButton:checked {
+    background-color: @glassButton; border-left: 2px solid @accent; color: @accent;
+}
 
-QWidget#sideBar { background-color: @panel; }
+QWidget#sideBar { background-color: @glassPanel; border-right: 1px solid @edge; }
 QLabel#sideBarHeader {
-    background-color: @sidebarHeader; color: @panelText; padding: 6px 8px;
-    font-weight: 600; letter-spacing: 0.4px;
+    background-color: transparent; color: @panelText; padding: 8px 10px;
+    font-weight: 600; letter-spacing: 0.4px; border-bottom: 1px solid @edge;
 }
 QLabel#sideBarHint { color: @panelText; padding: 8px; }
 
 QTreeView, QListView, QTableView {
-    background-color: @base; color: @baseText; border: none;
-    selection-background-color: @highlight; selection-color: @highlightedText;
-    alternate-background-color: @alternateBase;
+    background-color: @glassBase; color: @baseText; border: 1px solid @edge;
+    border-radius: 8px;
+    selection-background-color: @accentWash; selection-color: @highlightedText;
+    alternate-background-color: @glassRow;
 }
-QTreeView::item, QListView::item { padding: 2px; }
-QTreeView::item:hover, QListView::item:hover { background-color: @alternateBase; }
+QTreeView::item, QListView::item { padding: 3px 4px; border-radius: 4px; }
+QTreeView::item:hover, QListView::item:hover { background-color: @glassRow; }
 QHeaderView::section {
-    background-color: @panel; color: @panelText; border: none;
-    border-right: 1px solid @border; border-bottom: 1px solid @border; padding: 4px;
+    background-color: transparent; color: @panelText; border: none;
+    border-bottom: 1px solid @edge; padding: 5px;
 }
 
-QTabWidget::pane { border: none; background-color: @base; }
-QTabBar { background-color: @window; qproperty-drawBase: 0; }
-QTabBar::tab {
-    background-color: @tabInactive; color: @windowText; padding: 7px 14px;
-    border: none; border-right: 1px solid @border;
+QTabWidget::pane {
+    border: 1px solid @edge; background-color: @glassBase;
+    border-radius: 10px; top: 2px;
 }
-QTabBar::tab:selected { background-color: @tabActive; border-top: 1px solid @accent; }
-QTabBar::tab:hover { background-color: @alternateBase; }
+QTabBar { background-color: transparent; qproperty-drawBase: 0; }
+QTabBar::tab {
+    background-color: @glassTab; color: @windowText; padding: 7px 14px;
+    border: 1px solid transparent; border-bottom: none;
+    border-top-left-radius: 8px; border-top-right-radius: 8px; margin-right: 2px;
+}
+QTabBar::tab:selected {
+    background-color: @glassBase; border-color: @edge; border-top: 2px solid @accent;
+}
+QTabBar::tab:hover { background-color: @glassRow; }
 QTabBar::close-button { margin: 3px; }
 
 QWidget#fileEditorHeader {
-    background-color: @panel; border-bottom: 1px solid @border;
+    background-color: @glassHeader; border-bottom: 1px solid @edge;
 }
 QLabel#editorPath { color: @panelText; padding-left: 6px; }
 QLabel#editorPathMuted { color: @gutter; }
 
 QPlainTextEdit, QTextEdit, QTextBrowser, QLineEdit, QSpinBox, QComboBox, QKeySequenceEdit {
-    background-color: @inputBackground; color: @inputText; border: 1px solid @border;
-    selection-background-color: @highlight; selection-color: @highlightedText;
-    padding: 2px 4px;
+    background-color: @glassInput; color: @inputText; border: 1px solid @edge;
+    border-radius: 8px; padding: 4px 8px;
+    selection-background-color: @accentWash; selection-color: @highlightedText;
 }
-QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus {
-    border: 1px solid @accent;
+QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QTextBrowser:focus,
+QComboBox:focus, QSpinBox:focus {
+    border: 1px solid @focusEdge;
 }
+QComboBox::drop-down { border: none; width: 18px; }
 QComboBox QAbstractItemView {
-    background-color: @panel; color: @panelText; selection-background-color: @highlight;
+    background-color: @glassPanel; color: @panelText; border: 1px solid @edge;
+    selection-background-color: @accentWash;
 }
 QPushButton {
-    background-color: @button; color: @buttonText; border: 1px solid @border;
-    padding: 5px 12px; border-radius: 2px;
+    background-color: @glassButton; color: @buttonText; border: 1px solid @edge;
+    padding: 6px 14px; border-radius: 8px;
 }
-QPushButton:hover { border-color: @accent; }
-QPushButton:default { background-color: @accent; color: @highlightedText; }
-QPushButton:disabled { color: @gutter; }
+QPushButton:hover { background-color: @glassRow; border-color: @focusEdge; }
+QPushButton:pressed { background-color: @accentWash; }
+QPushButton:default { background-color: @accent; color: @highlightedText; border-color: @focusEdge; }
+QPushButton:disabled { color: @gutter; background-color: @glassButton; border-color: @edge; }
 QCheckBox, QRadioButton { background: transparent; color: @windowText; spacing: 6px; }
 QDockWidget { color: @panelText; }
 QDockWidget::title {
-    background-color: @sidebarHeader; color: @panelText;
-    border-bottom: 1px solid @border; padding: 4px 8px;
+    background-color: @glassHeader; color: @panelText;
+    border-bottom: 1px solid @edge; padding: 6px 10px;
+    border-top-left-radius: 8px; border-top-right-radius: 8px;
 }
-QGroupBox { border: 1px solid @border; margin-top: 12px; padding-top: 6px; }
-QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }
+QGroupBox { border: 1px solid @edge; border-radius: 10px; margin-top: 14px; padding-top: 8px; }
+QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
 
-QSplitter::handle { background-color: @border; }
+QSplitter::handle { background-color: @edge; }
 QSplitter::handle:horizontal { width: 1px; }
 QSplitter::handle:vertical { height: 1px; }
 
-QScrollBar:vertical { background: @window; width: 12px; margin: 0; }
-QScrollBar::handle:vertical { background: @button; min-height: 24px; border-radius: 3px; margin: 2px; }
-QScrollBar::handle:vertical:hover { background: @accent; }
-QScrollBar:horizontal { background: @window; height: 12px; margin: 0; }
-QScrollBar::handle:horizontal { background: @button; min-width: 24px; border-radius: 3px; margin: 2px; }
+QScrollBar:vertical { background: transparent; width: 11px; margin: 2px; }
+QScrollBar::handle:vertical { background: @scrollThumb; min-height: 26px; border-radius: 4px; }
+QScrollBar::handle:vertical:hover { background: @focusEdge; }
+QScrollBar:horizontal { background: transparent; height: 11px; margin: 2px; }
+QScrollBar::handle:horizontal { background: @scrollThumb; min-width: 26px; border-radius: 4px; }
+QScrollBar::handle:horizontal:hover { background: @focusEdge; }
 QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 
-QStatusBar#statusBar { background-color: @statusBar; color: @statusBarText; }
+QStatusBar#statusBar {
+    background-color: @glassStatus; color: @statusBarText; border-top: 1px solid @edge;
+}
 QStatusBar#statusBar QLabel { color: @statusBarText; padding: 0 6px; }
 QStatusBar::item { border: none; }
 
-QProgressBar { background-color: @panel; border: 1px solid @border; text-align: center; }
-QProgressBar::chunk { background-color: @accent; }
+QProgressBar {
+    background-color: @glassInput; border: 1px solid @edge;
+    border-radius: 7px; text-align: center;
+}
+QProgressBar::chunk { background-color: @accent; border-radius: 6px; }
 QDialog { background-color: @window; }
 QDialogButtonBox QPushButton { min-width: 80px; }
-QListWidget#commandList { background-color: @base; border: 1px solid @border; }
+QListWidget#commandList { background-color: @glassBase; border: 1px solid @edge; border-radius: 8px; }
 QLabel#sectionLabel { color: @panelText; font-weight: 600; }
 QLabel#hintLabel { color: @panelText; }
 QLabel#hintLabel:disabled { color: @gutter; }
 
 /* Design-system components: inspector, badges, replace bar. */
 QFrame#byteInspector {
-    background-color: @panel; border: 1px solid @border;
+    background-color: @glassPanel; border: 1px solid @edge; border-radius: 10px;
 }
 QLabel#inspectorTitle {
     color: @accent; font-weight: 600; letter-spacing: 0.6px;
@@ -146,14 +190,16 @@ QToolButton#inspectorClose {
 }
 QToolButton#inspectorClose:hover { color: @accent; }
 QToolButton#editToggle {
-    background: transparent; color: @accent; border: 1px solid @border;
-    padding: 2px 8px; border-radius: 2px;
+    background: transparent; color: @accent; border: 1px solid @edge;
+    padding: 3px 9px; border-radius: 7px;
 }
-QToolButton#editToggle:hover { border-color: @accent; }
+QToolButton#editToggle:hover { border-color: @focusEdge; background-color: @glassButton; }
 QLabel#signatureBadge {
-    color: @accent; border: 1px solid @border; padding: 1px 6px;
+    color: @accent; border: 1px solid @edge; border-radius: 7px; padding: 1px 7px;
 }
-QWidget#replaceBar { background-color: @panel; border-top: 1px solid @border; }
+QWidget#replaceBar {
+    background-color: @glassPanel; border-top: 1px solid @edge;
+}
 QKeySequenceEdit { padding: 1px 3px; }
 )");
 }
@@ -389,48 +435,61 @@ QString ThemeManager::styleSheet(const Theme& theme)
     QString sheet = sheetTemplate();
     const bool wallpaper = !theme.backgroundImage.isEmpty()
         && QFileInfo::exists(theme.backgroundImage);
-
-    // Background roles become translucent over a wallpaper so the image is
-    // visible through the panels while text colours stay unchanged.
-    static const QStringList translucentRoles = {
-        QStringLiteral("window"),       QStringLiteral("panel"),
-        QStringLiteral("base"),         QStringLiteral("alternateBase"),
-        QStringLiteral("button"),       QStringLiteral("activityBar"),
-        QStringLiteral("statusBar"),    QStringLiteral("tabActive"),
-        QStringLiteral("tabInactive"),  QStringLiteral("gutter"),
-        QStringLiteral("inputBackground"),
-        QStringLiteral("sidebarHeader"),
-    };
     const int opacity = std::clamp(theme.backgroundOpacity, 20, 100);
+    const QColor window = theme.color(QStringLiteral("window"));
+    const QColor accent = theme.color(QStringLiteral("accent"));
 
-    // Longest role first: a naive replacement would turn "@windowText" into
+    // Every surface is translucent over the window backdrop: the wallpaper's
+    // own opacity when one is set, otherwise a fixed glass level that still
+    // keeps text contrast comfortable.
+    const auto surface = [&](const QString& role, int glassAlpha) {
+        const QColor colour = theme.color(role);
+        return wallpaper ? glass(colour, opacity) : glass(colour, glassAlpha);
+    };
+
+    QHash<QString, QString> tokens;
+    for (const QString& role : Theme::requiredRoles())
+        tokens.insert(role, theme.color(role).name(QColor::HexRgb));
+    tokens.insert(QStringLiteral("glassPanel"), surface(QStringLiteral("panel"), 55));
+    tokens.insert(QStringLiteral("glassBase"), surface(QStringLiteral("base"), 90));
+    tokens.insert(QStringLiteral("glassBar"), surface(QStringLiteral("activityBar"), 45));
+    tokens.insert(QStringLiteral("glassHeader"), surface(QStringLiteral("sidebarHeader"), 58));
+    tokens.insert(QStringLiteral("glassInput"), surface(QStringLiteral("inputBackground"), 80));
+    tokens.insert(QStringLiteral("glassButton"), surface(QStringLiteral("button"), 78));
+    tokens.insert(QStringLiteral("glassTab"), surface(QStringLiteral("tabInactive"), 45));
+    tokens.insert(QStringLiteral("glassRow"),
+                  glass(theme.color(QStringLiteral("alternateBase")),
+                        wallpaper ? std::min(opacity, 60) : 40));
+    tokens.insert(QStringLiteral("accentWash"),
+                  glass(blend(theme.color(QStringLiteral("highlight")), accent, 0.45), 85));
+    tokens.insert(QStringLiteral("edge"),
+                  theme.dark ? glass(QColor(255, 255, 255), 12) : glass(QColor(0, 0, 0), 12));
+    tokens.insert(QStringLiteral("focusEdge"), glass(accent, 70));
+    tokens.insert(QStringLiteral("scrollThumb"), glass(theme.color(QStringLiteral("button")), 90));
+    // The status bar keeps its own role: its text colour is chosen to contrast
+    // with that colour, not with the activity bar's.
+    tokens.insert(QStringLiteral("glassStatus"), surface(QStringLiteral("statusBar"), 92));
+
+    // Longest token first: a naive replacement would turn "@windowText" into
     // "<window colour>Text" because "@window" is a prefix of it.
-    QStringList roles = Theme::requiredRoles();
-    std::sort(roles.begin(), roles.end(), [](const QString& left, const QString& right) {
+    QStringList keys = tokens.keys();
+    std::sort(keys.begin(), keys.end(), [](const QString& left, const QString& right) {
         return left.size() > right.size();
     });
-    for (const QString& role : roles) {
-        const QColor color = theme.color(role);
-        QString value = color.name(QColor::HexRgb);
-        if (wallpaper && translucentRoles.contains(role)) {
-            value = QStringLiteral("rgba(%1, %2, %3, %4%)")
-                        .arg(color.red())
-                        .arg(color.green())
-                        .arg(color.blue())
-                        .arg(opacity);
-        }
-        sheet.replace(QLatin1Char('@') + role, value);
-    }
+    for (const QString& key : keys)
+        sheet.replace(QLatin1Char('@') + key, tokens.value(key));
+
+    // Structural containers of the main window must not paint an opaque layer
+    // over the backdrop. Scoped to the main window: dialogs keep their normal
+    // opaque splitters and stacks.
+    sheet.prepend(QStringLiteral(
+        "QMainWindow#pkgstudioMainWindow QWidget#centralHost,\n"
+        "QMainWindow#pkgstudioMainWindow QDockWidget,\n"
+        "QMainWindow#pkgstudioMainWindow QSplitter,\n"
+        "QMainWindow#pkgstudioMainWindow QStackedWidget,\n"
+        "QWidget#aiChatPanel { background: transparent; }\n"));
 
     if (wallpaper) {
-        // Structural containers of the main window must not paint an opaque
-        // layer over the image it draws underneath them. Scoped to the main
-        // window: dialogs keep their normal opaque splitters and stacks.
-        sheet.prepend(QStringLiteral(
-            "QMainWindow#pkgstudioMainWindow QWidget#centralHost, "
-            "QMainWindow#pkgstudioMainWindow QSplitter, "
-            "QMainWindow#pkgstudioMainWindow QStackedWidget "
-            "{ background: transparent; }\n"));
         QString path = QDir::fromNativeSeparators(theme.backgroundImage);
         path.replace(QLatin1Char('"'), QStringLiteral("%22"));
         sheet.prepend(QStringLiteral("QMainWindow#pkgstudioMainWindow {\n"
@@ -439,9 +498,11 @@ QString ThemeManager::styleSheet(const Theme& theme)
                                      "    background-repeat: no-repeat;\n"
                                      "    background-color: %2;\n"
                                      "}\n")
-                          .arg(path, theme.color(QStringLiteral("window")).name(QColor::HexRgb)));
+                          .arg(path, window.name(QColor::HexRgb)));
     }
+    // Without a wallpaper the backdrop (the accent bloom behind the translucent
+    // surfaces) is painted by MainWindow::paintEvent; a style-sheet background
+    // on QMainWindow alone does not paint here.
     return sheet;
 }
-
 }  // namespace pkg
