@@ -10,6 +10,12 @@
 #include <limits>
 
 #if defined(Q_OS_WIN)
+// windows.h defines min/max as macros unless NOMINMAX is set, which breaks
+// std::min/std::max below (MSVC error C2589). Qt's qt_windows.h sets this for
+// us; here the header is included directly.
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
 #  include <windows.h>
 #else
 #  include <fcntl.h>
