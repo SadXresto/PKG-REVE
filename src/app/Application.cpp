@@ -230,11 +230,27 @@ int Application::run(const StartupOptions& options)
             m_window->showCodeTabForCurrentEditor();
         else if (options.screenshotTab == QLatin1String("chat"))
             m_window->showAiAssistant();
-        else if (!options.screenshotTab.isEmpty() && options.screenshotTab != QLatin1String("hex")
-                 && options.screenshotTab != QLatin1String("gameforge"))
+        else if (options.screenshotTab == QLatin1String("devflow")) {
+            const QString tab = options.screenshotDevFlowTab.isEmpty()
+                                    ? QStringLiteral("dashboard")
+                                    : options.screenshotDevFlowTab;
+            if (m_window->showDevFlowWorkspace(tab).isEmpty()) {
+                QTextStream(stderr)
+                    << QStringLiteral("Unknown --screenshot-devflow-tab '%1' (expected "
+                                      "dashboard, build, errors, tasks, snapshots, health or "
+                                      "workflows)\n")
+                           .arg(tab);
+                return 2;
+            }
+            m_window->setSidebarWidth(640);
+        } else if (!options.screenshotTab.isEmpty() &&
+                   options.screenshotTab != QLatin1String("hex") &&
+                   options.screenshotTab != QLatin1String("gameforge"))
             logWarning(QString::fromLatin1(kLogCategory),
                        QStringLiteral("Unknown --screenshot-tab '%1'")
                            .arg(options.screenshotTab));
+        if (options.screenshotWidth > 0 && options.screenshotHeight > 0)
+            m_window->resize(options.screenshotWidth, options.screenshotHeight);
         const QString path = options.screenshotPath;
 
         // The GameForge workspace scans and analyzes on worker threads, so the

@@ -83,6 +83,16 @@ QIcon makeIcon(IconKind kind, const QColor& color, int size)
         painter.drawEllipse(QPointF(s * 0.72, s * 0.55), s * 0.045, s * 0.045);
         break;
     }
+    case IconKind::DevFlow: {
+        // Workflow: three connected nodes with an arrow-like flow.
+        painter.drawRoundedRect(QRectF(s * 0.14, s * 0.16, s * 0.3, s * 0.2), s * 0.05, s * 0.05);
+        painter.drawRoundedRect(QRectF(s * 0.56, s * 0.4, s * 0.3, s * 0.2), s * 0.05, s * 0.05);
+        painter.drawRoundedRect(QRectF(s * 0.14, s * 0.64, s * 0.3, s * 0.2), s * 0.05, s * 0.05);
+        painter.drawLine(QPointF(s * 0.44, s * 0.26), QPointF(s * 0.56, s * 0.5));
+        painter.drawLine(QPointF(s * 0.29, s * 0.36), QPointF(s * 0.29, s * 0.64));
+        painter.drawLine(QPointF(s * 0.44, s * 0.74), QPointF(s * 0.56, s * 0.5));
+        break;
+    }
     case IconKind::Close: {
         painter.drawLine(QPointF(s * 0.3, s * 0.3), QPointF(s * 0.7, s * 0.7));
         painter.drawLine(QPointF(s * 0.7, s * 0.3), QPointF(s * 0.3, s * 0.7));

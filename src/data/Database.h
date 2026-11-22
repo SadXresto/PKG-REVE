@@ -56,6 +56,15 @@ public:
     void saveSession(const QString& key, const QJsonObject& value);
     [[nodiscard]] QJsonObject session(const QString& key) const;
 
+    // DevFlow items --------------------------------------------------------
+    // Named JSON documents grouped by kind (profiles, tasks, snapshots,
+    // workflows, error state). SQLite handles atomicity; callers still validate
+    // payloads before they are stored.
+    void saveDevflowItem(const QString& kind, const QString& id, const QString& payload);
+    [[nodiscard]] QList<QPair<QString, QString>> devflowItems(const QString& kind) const;
+    void removeDevflowItem(const QString& kind, const QString& id);
+    void clearDevflowItems(const QString& kind);
+
     // Analysis cache -------------------------------------------------------
     void cacheAnalysis(const QString& path, quint64 size, qint64 modifiedMs,
                        const QString& format, const QByteArray& payload);

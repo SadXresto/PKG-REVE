@@ -61,8 +61,14 @@ protected:
 TEST_F(DatabaseTest, CreatesCurrentSchema)
 {
     EXPECT_TRUE(database.isOpen());
-    EXPECT_EQ(database.schemaVersion(), 1);
+    EXPECT_GE(database.schemaVersion(), 2);
     EXPECT_GE(database.analysisCacheCount(), 0);
+    // Schema v2 adds DevFlow documents (profiles, tasks, snapshots, workflows).
+    database.saveDevflowItem(QStringLiteral("task"), QStringLiteral("t1"),
+                             QStringLiteral("{\"title\":\"x\"}"));
+    EXPECT_EQ(database.devflowItems(QStringLiteral("task")).size(), 1);
+    database.removeDevflowItem(QStringLiteral("task"), QStringLiteral("t1"));
+    EXPECT_TRUE(database.devflowItems(QStringLiteral("task")).isEmpty());
 }
 
 TEST_F(DatabaseTest, SettingsRoundTrip)

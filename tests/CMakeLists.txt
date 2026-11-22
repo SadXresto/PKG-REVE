@@ -37,6 +37,7 @@ add_executable(pkgstudio_tests
     test_gameforge.cpp
     test_gameforge_config.cpp
     test_apex_hex.cpp
+    test_devflow.cpp
     test_performance.cpp
 )
 

@@ -219,6 +219,21 @@ QFrame#settingsInfoCard {
     background-color: @glassPanel; border: 1px solid @edge; border-radius: 9px;
 }
 QWidget#settingsPage QWidget { background: transparent; }
+QWidget#devflowHeader {
+    background-color: @glassHeader; border-bottom: 1px solid @edge;
+}
+QLabel#devflowTitle {
+    color: @accent; font-weight: 700; letter-spacing: 1.6px;
+}
+QLabel#devflowStat {
+    color: @accent; font-size: 18px; font-weight: 700;
+}
+QListWidget#devflowList {
+    background-color: @glassBase; border: 1px solid @edge; border-radius: 8px;
+}
+QListWidget#devflowActivity {
+    background-color: transparent; border: none;
+}
 QKeySequenceEdit { padding: 1px 3px; }
 )");
 }

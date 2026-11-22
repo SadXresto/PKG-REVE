@@ -8,10 +8,12 @@
 #include "core/Logging.h"
 #include "core/ProcessInfo.h"
 #include "data/ThemeManager.h"
+#include "devflow/DevFlowStore.h"
 #include "ui/AboutDialog.h"
 #include "ui/ActivityBar.h"
 #include "ui/AiChatPanel.h"
 #include "ui/CommandPalette.h"
+#include "ui/DevFlowPanel.h"
 #include "ui/EditorArea.h"
 #include "ui/FileEditor.h"
 #include "ui/FileExplorer.h"
@@ -30,6 +32,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
+#include <QCryptographicHash>
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QDateTime>
@@ -189,6 +192,13 @@ MainWindow::MainWindow(Database& database, QWidget* parent)
     updateMemoryStatus();
     applyEditorPreferences();
 
+    // Autosave an incomplete-exit marker: the next start offers the last
+    // snapshot only if this run did not close cleanly.
+    m_crashedLastRun =
+        m_database.setting(QStringLiteral("devflow.cleanExit")) == QLatin1String("false");
+    m_database.setSetting(QStringLiteral("devflow.cleanExit"), QStringLiteral("false"));
+    QTimer::singleShot(900, this, &MainWindow::recoverWorkspaceSnapshot);
+
     logInfo(QString::fromLatin1(kLogCategory), QStringLiteral("Main window ready"));
 }
 
@@ -248,6 +258,9 @@ void MainWindow::buildUi()
     m_activity->addItem(QStringLiteral("gameforge"),
                         QStringLiteral("GameForge: project inventory, porting evidence"),
                         IconKind::GameForge);
+    m_activity->addItem(QStringLiteral("devflow"),
+                        QStringLiteral("DevFlow: builds, errors, tasks, workflows"),
+                        IconKind::DevFlow);
     m_activity->addStretch();
     m_activity->addItem(QStringLiteral("themes"), QStringLiteral("Theme editor"),
                         IconKind::Palette, false);
@@ -264,10 +277,37 @@ void MainWindow::buildUi()
     m_searchPanel = new SearchPanel(m_sideStack);
     m_recentPanel = new RecentPanel(m_sideStack);
     m_gameForge = new GameForgePanel(m_sideStack);
+    m_devFlow = new DevFlowPanel(
+        m_database,
+        DevFlowHooks{
+            [this]() { return m_projectPath; },
+            [this](const QString& path) {
+                const QFileInfo info(path);
+                const QString resolved = info.isAbsolute()
+                    ? path
+                    : QDir(m_projectPath.isEmpty() ? QDir::currentPath() : m_projectPath)
+                          .filePath(path);
+                openFile(QFileInfo::exists(resolved) ? resolved : path);
+            },
+            [this](const QString& path) {
+                if (!path.isEmpty())
+                    openProject(path);
+                else
+                    openProjectDialog();
+            },
+            [this](const QString& message) { statusBar()->showMessage(message, 6000); },
+            [this]() { return captureWorkspaceSnapshot(); },
+            [this](const devflow::WorkspaceSnapshot& snapshot) {
+                applyWorkspaceSnapshot(snapshot);
+            }},
+        m_sideStack);
     m_sideStack->addWidget(m_explorer);
     m_sideStack->addWidget(m_searchPanel);
     m_sideStack->addWidget(m_recentPanel);
     m_sideStack->addWidget(m_gameForge);
+    m_sideStack->addWidget(m_devFlow);
+    connect(m_devFlow, &DevFlowPanel::statusMessage, this,
+            [this](const QString& message) { statusBar()->showMessage(message, 6000); });
     centralLayout->addWidget(m_sideStack);
 
     // Left pane: activity bar + stacked side panels. It is one child of the
@@ -582,6 +622,46 @@ void MainWindow::buildCommands()
                    switchSidebar(QStringLiteral("gameforge"));
                    m_activity->setCurrent(QStringLiteral("gameforge"));
                });
+    const QString devflowCategory = QStringLiteral("DevFlow");
+    addCommand(QStringLiteral("view.devflow"),
+               QStringLiteral("DevFlow: development command center"), viewCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+D")), [this]() {
+                   switchSidebar(QStringLiteral("devflow"));
+                   m_activity->setCurrent(QStringLiteral("devflow"));
+               });
+    addCommand(QStringLiteral("devflow.dashboard"), QStringLiteral("DevFlow: dashboard"),
+               devflowCategory, QKeySequence(), [this]() {
+                   showDevFlowWorkspace(QStringLiteral("dashboard"));
+               });
+    addCommand(QStringLiteral("devflow.build"), QStringLiteral("DevFlow: build profiles"),
+               devflowCategory, QKeySequence(), [this]() {
+                   showDevFlowWorkspace(QStringLiteral("build"));
+               });
+    addCommand(QStringLiteral("devflow.errors"), QStringLiteral("DevFlow: error intelligence"),
+               devflowCategory, QKeySequence(), [this]() {
+                   showDevFlowWorkspace(QStringLiteral("errors"));
+               });
+    addCommand(QStringLiteral("devflow.tasks"), QStringLiteral("DevFlow: project tasks"),
+               devflowCategory, QKeySequence(), [this]() {
+                   showDevFlowWorkspace(QStringLiteral("tasks"));
+               });
+    addCommand(QStringLiteral("devflow.snapshots"),
+               QStringLiteral("DevFlow: workspace snapshots"), devflowCategory, QKeySequence(),
+               [this]() { showDevFlowWorkspace(QStringLiteral("snapshots")); });
+    addCommand(QStringLiteral("devflow.health"), QStringLiteral("DevFlow: project health check"),
+               devflowCategory, QKeySequence(), [this]() {
+                   showDevFlowWorkspace(QStringLiteral("health"));
+               });
+    addCommand(QStringLiteral("devflow.workflows"), QStringLiteral("DevFlow: workflows"),
+               devflowCategory, QKeySequence(), [this]() {
+                   showDevFlowWorkspace(QStringLiteral("workflows"));
+               });
+    addCommand(QStringLiteral("file.quickActions"),
+               QStringLiteral("Quick actions for the active file\u2026"), fileCategory,
+               QKeySequence(), [this]() { showQuickActions(); });
+    addCommand(QStringLiteral("file.hashSha256"), QStringLiteral("Calculate SHA-256 of active file"),
+               fileCategory, QKeySequence(), [this]() { calculateActiveFileHash(); });
+
     addCommand(QStringLiteral("view.togglePanel"), QStringLiteral("Toggle output panel"),
                viewCategory, QKeySequence(QStringLiteral("Ctrl+J")),
                [this]() { m_output->setVisible(!m_output->isVisible()); });
@@ -1057,6 +1137,50 @@ void MainWindow::showCommandPalette()
         entries.append(analysis);
     }
 
+    // Settings sections are first-class results, so "theme" or "privacy"
+    // leads straight to the matching settings page.
+    for (const QString& category : {QStringLiteral("Appearance"), QStringLiteral("Editor"),
+                                    QStringLiteral("Hex Editor"),
+                                    QStringLiteral("GameForge"),
+                                    QStringLiteral("AI Providers"),
+                                    QStringLiteral("Performance"),
+                                    QStringLiteral("Keyboard Shortcuts"),
+                                    QStringLiteral("Plugins"),
+                                    QStringLiteral("Privacy and Security"),
+                                    QStringLiteral("Updates")}) {
+        CommandPalette::Entry entry;
+        entry.id = QStringLiteral("settings:") + category;
+        entry.title = QStringLiteral("Settings: %1").arg(category);
+        entry.category = QStringLiteral("Settings");
+        entry.description = QStringLiteral("Open the %1 settings section").arg(category);
+        entry.keywords = QStringLiteral("preferences options configure settings");
+        entries.append(entry);
+    }
+
+    for (const RecentEntry& recent : m_database.recent(10)) {
+        if (recent.kind != QLatin1String("project") || !QFileInfo(recent.path).isDir())
+            continue;
+        CommandPalette::Entry entry;
+        entry.id = QStringLiteral("project:") + recent.path;
+        entry.title = QStringLiteral("Open project %1")
+                          .arg(QFileInfo(recent.path).fileName());
+        entry.category = QStringLiteral("Recent project");
+        entry.description = recent.path;
+        entry.keywords = QStringLiteral("recent project folder workspace");
+        entries.append(entry);
+    }
+
+    if (FileEditor* editor = currentEditor()) {
+        CommandPalette::Entry quick;
+        quick.id = QStringLiteral("cmd:file.quickActions");
+        quick.title = QStringLiteral("Quick actions for %1")
+                          .arg(QFileInfo(editor->path()).fileName());
+        quick.category = QStringLiteral("Workspace");
+        quick.description = QStringLiteral("Hex, metadata, hash, compare, bookmarks and paths");
+        quick.keywords = QStringLiteral("tools file actions context");
+        entries.append(quick);
+    }
+
     for (const HelpDialog::Topic& topic : HelpDialog::topics()) {
         CommandPalette::Entry entry;
         entry.id = QStringLiteral("cmd:") + topic.id;
@@ -1085,6 +1209,10 @@ void MainWindow::showCommandPalette()
     } else if (chosen == QLatin1String("analysis.show")) {
         if (FileEditor* editor = currentEditor())
             editor->showAnalysisTab();
+    } else if (chosen.startsWith(QLatin1String("settings:"))) {
+        showSettings(chosen.mid(9));
+    } else if (chosen.startsWith(QLatin1String("project:"))) {
+        openProject(chosen.mid(8));
     }
 }
 
@@ -1113,6 +1241,11 @@ void MainWindow::switchSidebar(const QString& id)
     }
     if (id == QLatin1String("gameforge")) {
         m_sideStack->setCurrentWidget(m_gameForge);
+        return;
+    }
+    if (id == QLatin1String("devflow")) {
+        m_sideStack->setCurrentWidget(m_devFlow);
+        m_devFlow->refresh();
         return;
     }
     m_sideStack->setCurrentWidget(m_explorer);
@@ -1586,7 +1719,7 @@ void MainWindow::showWelcome()
     updateWindowTitle();
 }
 
-void MainWindow::showSettings()
+void MainWindow::showSettings(const QString& category)
 {
     QList<SettingsDialog::ActionInfo> actions;
     for (const QString& id : m_commandOrder) {
@@ -1602,6 +1735,11 @@ void MainWindow::showSettings()
     }
 
     SettingsDialog dialog(m_settings, actions, this);
+    if (!category.isEmpty()) {
+        if (!dialog.selectCategory(category))
+            logWarning(QString::fromLatin1(kLogCategory),
+                       QStringLiteral("Unknown settings category '%1'").arg(category));
+    }
     if (dialog.exec() != QDialog::Accepted)
         return;
 
@@ -2258,6 +2396,8 @@ void MainWindow::closeEvent(QCloseEvent* event)
         }
     }
     saveSession();
+    saveAutosaveSnapshot();
+    m_database.setSetting(QStringLiteral("devflow.cleanExit"), QStringLiteral("true"));
     logInfo(QString::fromLatin1(kLogCategory), QStringLiteral("Shutting down"));
     m_memoryTimer->stop();
     event->accept();
@@ -2282,6 +2422,200 @@ void MainWindow::dropEvent(QDropEvent* event)
     else
         openFile(path);
     event->acceptProposedAction();
+}
+
+QString MainWindow::showDevFlowWorkspace(const QString& tab)
+{
+    if (m_devFlow == nullptr)
+        return {};
+    const QString title = m_devFlow->selectTab(tab);
+    if (title.isEmpty())
+        return {};
+    switchSidebar(QStringLiteral("devflow"));
+    if (m_activity != nullptr)
+        m_activity->setCurrent(QStringLiteral("devflow"));
+    return title;
+}
+
+void MainWindow::showQuickActions()
+{
+    FileEditor* editor = currentEditor();
+    if (editor == nullptr || editor->path().isEmpty()) {
+        statusBar()->showMessage(QStringLiteral("Open a file to see its quick actions"), 3000);
+        return;
+    }
+    const QVector<devflow::QuickAction> actions =
+        devflow::quickActionsForFile(editor->path(), true);
+    if (actions.isEmpty())
+        return;
+
+    QMenu menu(this);
+    QHash<QAction*, QString> ids;
+    for (const devflow::QuickAction& action : actions) {
+        QAction* entry = menu.addAction(action.label);
+        entry->setToolTip(action.description);
+        ids.insert(entry, action.id);
+    }
+    QAction* chosen = menu.exec(QCursor::pos());
+    if (chosen == nullptr)
+        return;
+    const QString id = ids.value(chosen);
+    if (id == QLatin1String("hex.open")) {
+        editor->hexView()->setFocus(Qt::OtherFocusReason);
+    } else if (id == QLatin1String("metadata")) {
+        editor->showAnalysisTab();
+    } else if (id == QLatin1String("hash")) {
+        calculateActiveFileHash();
+    } else if (id == QLatin1String("compare")) {
+        editor->compareWithFile();
+    } else if (id == QLatin1String("bookmark")) {
+        editor->toggleBookmark(editor->hexView()->cursorOffset());
+    } else if (id == QLatin1String("folder")) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(editor->path()).absolutePath()));
+    } else if (id == QLatin1String("copyPath")) {
+        QApplication::clipboard()->setText(editor->path());
+        statusBar()->showMessage(QStringLiteral("File path copied"), 2500);
+    } else if (id == QLatin1String("properties")) {
+        const QFileInfo info(editor->path());
+        QMessageBox::information(
+            this, QStringLiteral("File properties"),
+            QStringLiteral("Path: %1\nSize: %2\nModified: %3\nPermissions: %4")
+                .arg(info.absoluteFilePath(), fmt::humanBytes(editor->fileSize()),
+                     info.lastModified().toString(QStringLiteral("yyyy-MM-dd HH:mm")),
+                     QString::number(static_cast<int>(info.permissions()), 16)));
+    }
+}
+
+void MainWindow::calculateActiveFileHash()
+{
+    FileEditor* editor = currentEditor();
+    if (editor == nullptr || editor->path().isEmpty()) {
+        statusBar()->showMessage(QStringLiteral("Open a file to hash it"), 3000);
+        return;
+    }
+    const QString path = editor->path();
+    statusBar()->showMessage(QStringLiteral("Hashing %1\u2026").arg(QFileInfo(path).fileName()));
+    auto* watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher, path]() {
+        const QString hash = watcher->result();
+        watcher->deleteLater();
+        if (hash.isEmpty()) {
+            statusBar()->showMessage(QStringLiteral("Cannot read the file for hashing"), 4000);
+            return;
+        }
+        QApplication::clipboard()->setText(hash);
+        statusBar()->showMessage(QStringLiteral("SHA-256 copied to the clipboard"), 4000);
+        QMessageBox::information(
+            this, QStringLiteral("SHA-256"),
+            QStringLiteral("%1\n\n%2\n\nThe hash is on the clipboard; the file was not "
+                           "modified.")
+                .arg(QFileInfo(path).fileName(), hash));
+    });
+    watcher->setFuture(QtConcurrent::run([path]() {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly))
+            return QString();
+        QCryptographicHash hash(QCryptographicHash::Sha256);
+        if (!hash.addData(&file))
+            return QString();
+        return QString::fromLatin1(hash.result().toHex());
+    }));
+}
+
+devflow::WorkspaceSnapshot MainWindow::captureWorkspaceSnapshot() const
+{
+    devflow::WorkspaceSnapshot snapshot;
+    snapshot.id = QStringLiteral("autosave");
+    snapshot.name = QStringLiteral("Autosave");
+    snapshot.projectPath = m_projectPath;
+    snapshot.openFiles = openPaths();
+    const FileEditor* active = m_editors->currentEditor();
+    snapshot.activeIndex = 0;
+    for (int index = 0; index < m_editors->count(); ++index) {
+        FileEditor* editor = m_editors->editorAt(index);
+        if (editor == nullptr)
+            continue;
+        snapshot.cursorOffsets.insert(editor->path(), editor->hexView()->cursorOffset());
+        if (editor == active)
+            snapshot.activeIndex = index;
+    }
+    snapshot.sidebarId = m_activity != nullptr ? m_activity->currentId() : QString();
+    if (m_mainSplitter != nullptr)
+        snapshot.splitterSizes = m_mainSplitter->sizes();
+    return snapshot;
+}
+
+void MainWindow::applyWorkspaceSnapshot(const devflow::WorkspaceSnapshot& snapshot)
+{
+    QStringList missing;
+    for (const QString& path : snapshot.openFiles) {
+        if (QFileInfo(path).isFile())
+            openFile(path);
+        else
+            missing.append(path);
+    }
+    if (snapshot.activeIndex >= 0 && snapshot.activeIndex < snapshot.openFiles.size()) {
+        const QString active = snapshot.openFiles.at(snapshot.activeIndex);
+        if (FileEditor* editor = m_editors->editorForPath(active))
+            m_editors->setCurrentWidget(editor);
+    }
+    for (auto it = snapshot.cursorOffsets.constBegin();
+         it != snapshot.cursorOffsets.constEnd(); ++it) {
+        if (FileEditor* editor = m_editors->editorForPath(it.key()))
+            editor->goToOffset(it.value());
+    }
+    if (m_mainSplitter != nullptr && snapshot.splitterSizes.size() == 2)
+        m_mainSplitter->setSizes(snapshot.splitterSizes);
+    if (!snapshot.sidebarId.isEmpty())
+        switchSidebar(snapshot.sidebarId);
+
+    if (missing.isEmpty()) {
+        statusBar()->showMessage(
+            QStringLiteral("Workspace snapshot \"%1\" restored").arg(snapshot.name), 4000);
+    } else {
+        QMessageBox::information(
+            this, QStringLiteral("Snapshot restored with missing files"),
+            QStringLiteral("Some files in this snapshot no longer exist:\n\n%1")
+                .arg(missing.join(QLatin1Char('\n'))));
+    }
+    logInfo(QString::fromLatin1(kLogCategory),
+            QStringLiteral("Workspace snapshot restored: %1").arg(snapshot.name));
+}
+
+void MainWindow::saveAutosaveSnapshot()
+{
+    devflow::WorkspaceSnapshot snapshot = captureWorkspaceSnapshot();
+    if (snapshot.openFiles.isEmpty())
+        return;
+    snapshot.createdAt = QDateTime::currentDateTime();
+    devflow::DevFlowStore store(m_database);
+    QString error;
+    if (!store.saveSnapshot(snapshot, &error)) {
+        logWarning(QString::fromLatin1(kLogCategory),
+                   QStringLiteral("Cannot autosave workspace: %1").arg(error));
+    }
+}
+
+void MainWindow::recoverWorkspaceSnapshot()
+{
+    if (!m_crashedLastRun)
+        return;
+    devflow::DevFlowStore store(m_database);
+    const QList<devflow::WorkspaceSnapshot> snapshots = store.snapshots();
+    const auto it = std::find_if(snapshots.begin(), snapshots.end(),
+                                 [](const devflow::WorkspaceSnapshot& snapshot) {
+                                     return snapshot.id == QLatin1String("autosave");
+                                 });
+    if (it == snapshots.end())
+        return;
+    const auto answer = QMessageBox::question(
+        this, QStringLiteral("Recover workspace"),
+        QStringLiteral("PKG Studio did not close cleanly last time. Restore the %1 tab(s) that "
+                       "were open?")
+            .arg(it->openFiles.size()),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+    if (answer == QMessageBox::Yes)
+        applyWorkspaceSnapshot(*it);
 }
 
 }  // namespace pkg::ui

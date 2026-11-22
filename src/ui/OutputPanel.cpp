@@ -67,9 +67,6 @@ OutputPanel::OutputPanel(QWidget* parent) : QWidget(parent)
     toolbarLayout->setContentsMargins(6, 4, 6, 4);
     toolbarLayout->setSpacing(6);
 
-    auto* levelLabel = new QLabel(QStringLiteral("Level"), toolbar);
-    levelLabel->setObjectName(QStringLiteral("hintLabel"));
-    toolbarLayout->addWidget(levelLabel);
 
     m_filter = new QComboBox(toolbar);
     m_filter->addItems({QStringLiteral("Debug"), QStringLiteral("Info"),
@@ -79,12 +76,13 @@ OutputPanel::OutputPanel(QWidget* parent) : QWidget(parent)
     toolbarLayout->addWidget(m_filter);
 
     m_search = new QLineEdit(toolbar);
-    m_search->setPlaceholderText(QStringLiteral("Filter output\\u2026"));
+    m_search->setPlaceholderText(QStringLiteral("Filter output…"));
     m_search->setClearButtonEnabled(true);
     m_search->setMaximumWidth(240);
     toolbarLayout->addWidget(m_search);
 
-    m_timestamps = new QCheckBox(QStringLiteral("Timestamps"), toolbar);
+    m_timestamps = new QCheckBox(QStringLiteral("Time"), toolbar);
+    m_timestamps->setToolTip(QStringLiteral("Show timestamps"));
     m_timestamps->setChecked(true);
     toolbarLayout->addWidget(m_timestamps);
 
@@ -104,7 +102,7 @@ OutputPanel::OutputPanel(QWidget* parent) : QWidget(parent)
     auto* copyButton = new QPushButton(QStringLiteral("Copy"), toolbar);
     copyButton->setToolTip(QStringLiteral("Copy selected output, or everything visible"));
     auto* clearButton = new QPushButton(QStringLiteral("Clear"), toolbar);
-    auto* exportButton = new QPushButton(QStringLiteral("Export\\u2026"), toolbar);
+    auto* exportButton = new QPushButton(QStringLiteral("Export…"), toolbar);
     toolbarLayout->addWidget(copyButton);
     toolbarLayout->addWidget(clearButton);
     toolbarLayout->addWidget(exportButton);
@@ -148,7 +146,7 @@ OutputPanel::OutputPanel(QWidget* parent) : QWidget(parent)
                 copy->setEnabled(m_output->textCursor().hasSelection());
                 QAction* copyAll = menu.addAction(QStringLiteral("Copy visible output"));
                 menu.addSeparator();
-                QAction* clear = menu.addAction(QStringLiteral("Clear output\\u2026"));
+                QAction* clear = menu.addAction(QStringLiteral("Clear output…"));
                 QAction* chosen = menu.exec(m_output->mapToGlobal(position));
                 if (chosen == copy)
                     copySelection();

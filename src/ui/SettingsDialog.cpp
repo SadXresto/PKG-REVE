@@ -153,7 +153,7 @@ void SettingsDialog::buildCenter()
     auto* header = new QHBoxLayout();
     m_search = new QLineEdit(this);
     m_search->setPlaceholderText(
-        QStringLiteral("Search settings, sections and explanations\\u2026"));
+        QStringLiteral("Search settings, sections and explanations…"));
     m_search->setClearButtonEnabled(true);
     header->addWidget(m_search, 1);
     auto* hint = new QLabel(QStringLiteral("Changes are previewed live, then saved."), this);
@@ -215,7 +215,7 @@ void SettingsDialog::buildCenter()
     buildUpdatesPage(updates);
 
     auto* footer = new QHBoxLayout();
-    auto* restore = new QPushButton(QStringLiteral("Restore defaults\\u2026"), this);
+    auto* restore = new QPushButton(QStringLiteral("Restore defaults…"), this);
     auto* resetCategory = new QPushButton(QStringLiteral("Reset this category"), this);
     footer->addWidget(restore);
     footer->addWidget(resetCategory);
@@ -711,6 +711,18 @@ void SettingsDialog::resetShortcutsToDefaults()
         if (editor != nullptr)
             editor->setKeySequence(action.defaultShortcut);
     }
+}
+
+bool SettingsDialog::selectCategory(const QString& title)
+{
+    const QString needle = title.trimmed().toLower();
+    for (int row = 0; row < m_categories->count(); ++row) {
+        if (m_categories->item(row)->text().toLower() == needle) {
+            m_categories->setCurrentRow(row);
+            return true;
+        }
+    }
+    return false;
 }
 
 void SettingsDialog::reject()

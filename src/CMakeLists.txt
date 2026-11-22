@@ -41,6 +41,12 @@ add_library(pkgstudio_app STATIC
     app/Application.cpp
     data/Database.cpp
     data/Settings.cpp
+    devflow/BuildRunner.cpp
+    devflow/DevFlowModels.cpp
+    devflow/DevFlowStore.cpp
+    devflow/ErrorIntelligence.cpp
+    devflow/ProjectHealth.cpp
+    devflow/WorkflowRunner.cpp
     data/Theme.cpp
     data/ThemeManager.cpp
     ui/AboutDialog.cpp
@@ -49,6 +55,7 @@ add_library(pkgstudio_app STATIC
     ui/ByteInspector.cpp
     ui/CommandPalette.cpp
     ui/CompareDialog.cpp
+    ui/DevFlowPanel.cpp
     ui/DependencyGraphView.cpp
     ui/DialogCapture.cpp
     ui/EditorArea.cpp

@@ -125,6 +125,15 @@ int main(int argc, char* argv[])
         QStringLiteral("Tab to show in a --screenshot-tab gameforge capture: inventory, "
                        "graph, config, portability or intel."),
         QStringLiteral("tab"));
+    const QCommandLineOption screenshotDevFlowOption(
+        QStringLiteral("screenshot-devflow-tab"),
+        QStringLiteral("Tab to show in a --screenshot-tab devflow capture: dashboard, build, "
+                       "errors, tasks, snapshots, health or workflows."),
+        QStringLiteral("tab"));
+    const QCommandLineOption screenshotSizeOption(
+        QStringLiteral("screenshot-size"),
+        QStringLiteral("Capture size as WIDTHxHEIGHT, for example 1280x720 or 1920x1080."),
+        QStringLiteral("size"));
     const QCommandLineOption screenshotDialogOption(
         QStringLiteral("screenshot-dialog"),
         QStringLiteral("Capture a dialog instead of the main window: about, "
@@ -140,6 +149,8 @@ int main(int argc, char* argv[])
     parser.addOption(screenshotOption);
     parser.addOption(screenshotTabOption);
     parser.addOption(screenshotGameForgeOption);
+    parser.addOption(screenshotDevFlowOption);
+    parser.addOption(screenshotSizeOption);
     parser.addOption(screenshotDialogOption);
     parser.addOption(selfTestOption);
     parser.process(app);
@@ -153,6 +164,21 @@ int main(int argc, char* argv[])
     options.screenshotPath = parser.value(screenshotOption);
     options.screenshotTab = parser.value(screenshotTabOption);
     options.screenshotGameForgeTab = parser.value(screenshotGameForgeOption);
+    options.screenshotDevFlowTab = parser.value(screenshotDevFlowOption);
+    const QStringList size = parser.value(screenshotSizeOption).split(QLatin1Char('x'));
+    if (size.size() == 2) {
+        options.screenshotWidth = size.at(0).toInt();
+        options.screenshotHeight = size.at(1).toInt();
+        if (options.screenshotWidth <= 0 || options.screenshotHeight <= 0) {
+            QTextStream(stderr) << QStringLiteral("Invalid --screenshot-size '%1'\n")
+                                       .arg(parser.value(screenshotSizeOption));
+            return 2;
+        }
+    } else if (!parser.value(screenshotSizeOption).isEmpty()) {
+        QTextStream(stderr) << QStringLiteral("Invalid --screenshot-size '%1' (expected WxH)\n")
+                                   .arg(parser.value(screenshotSizeOption));
+        return 2;
+    }
     options.screenshotDialog = parser.value(screenshotDialogOption);
     options.selfTest = parser.isSet(selfTestOption);
 

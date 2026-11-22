@@ -44,6 +44,9 @@ public:
     [[nodiscard]] AppSettings values() const;
     [[nodiscard]] QHash<QString, QKeySequence> shortcutOverrides() const;
     [[nodiscard]] bool shortcutsWereReset() const { return m_shortcutsReset; }
+    /// Selects a category by title (case-insensitive). Returns false when no
+    /// such category exists.
+    bool selectCategory(const QString& title);
 
 protected:
     void reject() override;

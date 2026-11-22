@@ -5,6 +5,7 @@
 #include "core/Result.h"
 #include "data/Database.h"
 #include "data/Settings.h"
+#include "devflow/DevFlowModels.h"
 
 #include <QFutureWatcher>
 #include <QHash>
@@ -31,6 +32,7 @@ namespace pkg::ui {
 
 class ActivityBar;
 class AiChatPanel;
+class DevFlowPanel;
 class EditorArea;
 class FileEditor;
 class FileExplorer;
@@ -69,8 +71,14 @@ public:
     [[nodiscard]] FileEditor* activeEditor() const;
     void openProject(const QString& path);
     void showWelcome();
-    void showSettings();
+    /// `category` optionally preselects a settings center section.
+    void showSettings(const QString& category = {});
     void showCommandPalette();
+    /// Opens DevFlow (optionally a tab). Returns the tab title, empty when
+    /// the id is unknown.
+    QString showDevFlowWorkspace(const QString& tab);
+    /// Contextual actions that are truly available for the active file.
+    void showQuickActions();
     void showThemeEditor();
     void showAiAssistant();
     void chooseThemeBackground();
@@ -135,6 +143,12 @@ private:
     void showDiagnosticsDialog();
     void clearAnalysisCache();
 
+    devflow::WorkspaceSnapshot captureWorkspaceSnapshot() const;
+    void applyWorkspaceSnapshot(const devflow::WorkspaceSnapshot& snapshot);
+    void saveAutosaveSnapshot();
+    void recoverWorkspaceSnapshot();
+    void calculateActiveFileHash();
+
     void startAnalysis(FileEditor* editor, std::shared_ptr<HexDocument> document);
     void onAnalysisFinished(FileEditor* editor);
     void setBusy(bool busy, const QString& message);
@@ -152,6 +166,7 @@ private:
     SearchPanel* m_searchPanel = nullptr;
     RecentPanel* m_recentPanel = nullptr;
     GameForgePanel* m_gameForge = nullptr;
+    DevFlowPanel* m_devFlow = nullptr;
 
     QSplitter* m_mainSplitter = nullptr;
     QSplitter* m_verticalSplitter = nullptr;
@@ -189,6 +204,7 @@ private:
     QPointer<FileEditor> m_pendingAnalysisFocus;
     QPixmap m_wallpaper;
     QString m_wallpaperPath;
+    bool m_crashedLastRun = false;
 };
 
 }  // namespace pkg::ui

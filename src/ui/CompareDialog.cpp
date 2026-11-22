@@ -36,7 +36,7 @@ CompareDialog::CompareDialog(const QString& basePath, QWidget* parent)
     m_path = new QLineEdit(this);
     m_path->setPlaceholderText(QStringLiteral("Path of the file to compare against"));
     row->addWidget(m_path, 1);
-    auto* browse = new QPushButton(QStringLiteral("Browse\\u2026"), this);
+    auto* browse = new QPushButton(QStringLiteral("Browse…"), this);
     row->addWidget(browse);
     layout->addLayout(row);
 
@@ -112,7 +112,7 @@ void CompareDialog::startCompare()
     m_running = true;
     m_compare->setEnabled(false);
     m_runs->setRowCount(0);
-    m_summary->setText(QStringLiteral("Comparing\\u2026"));
+    m_summary->setText(QStringLiteral("Comparing…"));
     m_token = CancelToken();
     const QString base = m_basePath;
     m_watcher->setFuture(QtConcurrent::run([base, other, token = m_token]() {

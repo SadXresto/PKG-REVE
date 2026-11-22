@@ -2,6 +2,8 @@
 #include "core/CancelToken.h"
 #include "core/HexBookmarks.h"
 #include "core/Logging.h"
+#include "data/Database.h"
+#include "data/Settings.h"
 #include "ui/OutputPanel.h"
 #include "ui/SettingsDialog.h"
 
@@ -221,6 +223,35 @@ TEST(SettingsCenterTest, ValuesRoundTripAndReset)
     EXPECT_EQ(returned.fontSize, 13);
     EXPECT_EQ(returned.hexBytesPerRow, 32);
     EXPECT_FALSE(returned.confirmWrites);
+}
+
+TEST(SettingsCenterTest, ThemePreferenceSurvivesReload)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    pkg::Database database;
+    ASSERT_TRUE(database.open(dir.filePath(QStringLiteral("settings.db"))));
+    pkg::Settings::instance().attach(&database);
+
+    pkg::AppSettings values = pkg::Settings::instance().values();
+    values.themeId = QStringLiteral("pkgstudio.terminal.classic");
+    pkg::Settings::instance().setValues(values);
+
+    // Re-attaching reloads the persisted rows, as a restart would.
+    pkg::Settings::instance().attach(&database);
+    EXPECT_EQ(pkg::Settings::instance().values().themeId,
+              QStringLiteral("pkgstudio.terminal.classic"));
+    EXPECT_EQ(database.setting(QStringLiteral("ui.theme")),
+              QStringLiteral("pkgstudio.terminal.classic"));
+}
+
+TEST(SettingsCenterTest, CategoryCanBeSelectedForSearchResults)
+{
+    pkg::AppSettings values;
+    pkg::ui::SettingsDialog dialog(values, {});
+    EXPECT_TRUE(dialog.selectCategory(QStringLiteral("Privacy and Security")));
+    EXPECT_TRUE(dialog.selectCategory(QStringLiteral("hex editor")));
+    EXPECT_FALSE(dialog.selectCategory(QStringLiteral("No such section")));
 }
 
 TEST(BinaryCompareTest, MissingFileAndCancellationFail)

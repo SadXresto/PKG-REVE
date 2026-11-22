@@ -24,6 +24,12 @@ struct StartupOptions {
     /// With --screenshot-tab gameforge: which workspace tab to show
     /// (inventory, graph, config, portability or intel; graph is the default).
     QString screenshotGameForgeTab;
+    /// With --screenshot-tab devflow: dashboard, build, errors, tasks,
+    /// snapshots, health or workflows (dashboard is the default).
+    QString screenshotDevFlowTab;
+    /// Optional capture size, e.g. 1280x720. Zero keeps the normal size.
+    int screenshotWidth = 0;
+    int screenshotHeight = 0;
     /// With --screenshot: capture a dialog instead of the main window
     /// ("about" or "feature-status").
     QString screenshotDialog;

@@ -14,7 +14,7 @@
 namespace pkg {
 namespace {
 constexpr auto kLogCategory = "database";
-constexpr int kSchemaVersion = 1;
+constexpr int kSchemaVersion = 2;
 }  // namespace
 
 Database::~Database()
@@ -130,6 +130,10 @@ Status Database::migrate()
                        "format TEXT NOT NULL, payload BLOB NOT NULL, created_at INTEGER NOT NULL)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS analysis_created_idx "
                        "ON analysis_cache(created_at DESC)"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS devflow ("
+                       "kind TEXT NOT NULL, id TEXT NOT NULL, payload TEXT NOT NULL, "
+                       "updated_at INTEGER NOT NULL, PRIMARY KEY(kind, id))"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS devflow_kind_idx ON devflow(kind, updated_at DESC)"),
     };
 
     for (const QString& statement : statements) {
@@ -290,6 +294,63 @@ QJsonObject Database::session(const QString& key) const
         return {};
     const QJsonDocument document = QJsonDocument::fromJson(json.toUtf8());
     return document.object();
+}
+
+void Database::saveDevflowItem(const QString& kind, const QString& id, const QString& payload)
+{
+    if (!isOpen() || kind.isEmpty() || id.isEmpty())
+        return;
+    QSqlQuery query(QSqlDatabase::database(m_connectionName, false));
+    query.prepare(QStringLiteral(
+        "INSERT INTO devflow(kind, id, payload, updated_at) VALUES(?, ?, ?, ?) "
+        "ON CONFLICT(kind, id) DO UPDATE SET payload = excluded.payload, "
+        "updated_at = excluded.updated_at"));
+    query.addBindValue(kind);
+    query.addBindValue(id);
+    query.addBindValue(payload);
+    query.addBindValue(QDateTime::currentSecsSinceEpoch());
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        logWarning(QString::fromLatin1(kLogCategory),
+                   QStringLiteral("Cannot save DevFlow item: %1").arg(m_lastError));
+    }
+}
+
+QList<QPair<QString, QString>> Database::devflowItems(const QString& kind) const
+{
+    QList<QPair<QString, QString>> items;
+    if (!isOpen())
+        return items;
+    QSqlQuery query(QSqlDatabase::database(m_connectionName, false));
+    query.prepare(QStringLiteral(
+        "SELECT id, payload FROM devflow WHERE kind = ? ORDER BY updated_at DESC, id"));
+    query.addBindValue(kind);
+    if (!query.exec())
+        return items;
+    while (query.next())
+        items.append({query.value(0).toString(), query.value(1).toString()});
+    return items;
+}
+
+void Database::removeDevflowItem(const QString& kind, const QString& id)
+{
+    if (!isOpen())
+        return;
+    QSqlQuery query(QSqlDatabase::database(m_connectionName, false));
+    query.prepare(QStringLiteral("DELETE FROM devflow WHERE kind = ? AND id = ?"));
+    query.addBindValue(kind);
+    query.addBindValue(id);
+    query.exec();
+}
+
+void Database::clearDevflowItems(const QString& kind)
+{
+    if (!isOpen())
+        return;
+    QSqlQuery query(QSqlDatabase::database(m_connectionName, false));
+    query.prepare(QStringLiteral("DELETE FROM devflow WHERE kind = ?"));
+    query.addBindValue(kind);
+    query.exec();
 }
 
 void Database::cacheAnalysis(const QString& path, quint64 size, qint64 modifiedMs,
