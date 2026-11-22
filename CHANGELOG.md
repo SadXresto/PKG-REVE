@@ -4,6 +4,29 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.8.0] - 2026-11-22
+
+### Added
+
+- **GameForge workspace** (Ctrl+Shift+G): scans a local game project folder in the
+  background and shows a categorised inventory with per-file and per-category sizes.
+  Detects CMake, Meson, Makefile, Godot, Unity and Unreal projects from their marker
+  files, skips VCS/engine-cache/build folders, never follows symbolic links and keeps
+  the original project untouched.
+- **Portability evidence report**: reads source-like files and reports known API
+  families (Win32, Direct3D, Metal, OpenGL, Vulkan, SDL, GLFW, XInput, XAudio2,
+  CoreAudio, OpenAL, FMOD/Wwise, pthread, std::thread) with occurrence counts and a
+  `file:line` example. Rows open their first match in the hex editor. The report states
+  its own limits: matches are evidence, not a build result or an automatic port.
+- New GameForge help topic, activity-bar entry, command-palette command and Tools menu
+  action.
+
+### Changed
+
+- Help → Feature status now separates the working GameForge scanner from the
+  GameForge phases that are still planned (modding workbench, performance lab, build
+  execution, export).
+
 ## [0.7.4] - 2026-11-22
 
 ### Changed

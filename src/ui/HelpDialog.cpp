@@ -132,6 +132,10 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
                   "synchronisation and built-in examples.</li>"
                   "<li>Command center, offline help, themes, settings, session restore and the "
                   "synthetic sample workspace.</li>"
+                  "<li>GameForge workspace: bounded background project scan, build-system "
+                  "and engine detection, categorised file inventory with sizes, filename "
+                  "filter, open-in-hex-editor, and a portability report that lists "
+                  "platform/API matches with file:line evidence.</li>"
                   "</ul>"
                   "<h3>Partial or experimental</h3>"
                   "<ul>"
@@ -149,11 +153,17 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
                   "bounds, never proof that a file conforms to a format.</li>"
                   "<li>Signature matches are documented patterns with a confidence note, not a "
                   "malware or integrity verdict.</li>"
+                  "<li>GameForge portability findings are textual API matches in source-like "
+                  "files. They are not a build, not an automatic port, and they do not read "
+                  "generated, compressed, encrypted or oversized files.</li>"
                   "</ul>"
                   "<h3>Planned, not present</h3>"
                   "<ul>"
                   "<li>CPU disassembly, debugging, binary diff/navigation, a plugin runtime, "
                   "code-signed installers, an updater and a Windows build verified in CI.</li>"
+                  "<li>GameForge phases that are not implemented: mod project manager and "
+                  "asset replacement, performance-lab monitoring, project build execution, "
+                  "project export/packaging and a game-aware AI prompt preset.</li>"
                   "</ul>"))});
 
     topics.append(
@@ -265,6 +275,39 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
                   "<p><b>No warranty.</b> This is a development build provided as is. Back up "
                   "before saving. The full text is in <code>TERMS.md</code> and "
                   "<code>LICENSE</code>.</p>"))});
+
+    topics.append(
+        {QStringLiteral("help.gameforge"), QStringLiteral("GameForge workspace"),
+         QStringLiteral("Project inventory, build-system detection and portability evidence."),
+         page(QStringLiteral("GameForge workspace"),
+              QStringLiteral(
+                  "<p><b>GameForge</b> (Ctrl+Shift+G, or the gamepad icon in the activity "
+                  "bar) inspects a local game project folder you are allowed to work on. It "
+                  "never writes to the project and never runs anything from it.</p>"
+                  "<h3>Inventory</h3>"
+                  "<p>Opening a folder (or opening any project with <i>File &rarr; Open "
+                  "project folder</i>) starts a background scan. The scan reports the "
+                  "detected project type from marker files &mdash; CMake, Meson, Makefile, "
+                  "Godot, Unity (Assets/ + ProjectSettings/) or Unreal (*.uproject) &mdash; "
+                  "and a folder tree with a category and size per file. Version-control, "
+                  "engine cache and build output folders are skipped, and symbolic links are "
+                  "never followed. Use the filter box to narrow by name, folder or "
+                  "category, and double-click a file to open it in the hex editor.</p>"
+                  "<h3>Portability evidence</h3>"
+                  "<p><i>Analyze portability</i> reads source-like files (source, headers, "
+                  "shaders, scripts, build files; limited to a few hundred KiB per file) "
+                  "and counts known API families: Win32, Direct3D, Metal, OpenGL, Vulkan, "
+                  "SDL, GLFW, XInput, XAudio2, CoreAudio, OpenAL, FMOD/Wwise, pthread and "
+                  "the C++ standard threads. Each row shows matches, an example "
+                  "<code>file:line</code> and what the family means for a port. Double-click "
+                  "a row to open its first match.</p>"
+                  "<p><b>These are matches, not a build result.</b> GameForge does not port "
+                  "anything, does not generate patches and does not run the project's build "
+                  "system. A missing finding only means the text was not found in the files "
+                  "that were read.</p>"
+                  "<p>Not implemented yet: mod projects, asset replacement, performance "
+                  "profiling and build execution. They are listed as planned in <i>Feature "
+                  "status</i> and never shown as working controls.</p>"))});
 
     topics.append(
         {QStringLiteral("help.limitations"), QStringLiteral("Limitations and honest scope"),

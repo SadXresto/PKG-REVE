@@ -73,6 +73,16 @@ QIcon makeIcon(IconKind kind, const QColor& color, int size)
         painter.drawPoint(QPointF(s * 0.5, s * 0.67));
         break;
     }
+    case IconKind::GameForge: {
+        // Gamepad outline: body, d-pad cross on the left, two buttons right.
+        painter.drawRoundedRect(QRectF(s * 0.1, s * 0.32, s * 0.8, s * 0.38), s * 0.16, s * 0.16);
+        painter.drawLine(QPointF(s * 0.3, s * 0.42), QPointF(s * 0.3, s * 0.58));
+        painter.drawLine(QPointF(s * 0.22, s * 0.5), QPointF(s * 0.38, s * 0.5));
+        painter.setBrush(color);
+        painter.drawEllipse(QPointF(s * 0.64, s * 0.45), s * 0.045, s * 0.045);
+        painter.drawEllipse(QPointF(s * 0.72, s * 0.55), s * 0.045, s * 0.045);
+        break;
+    }
     case IconKind::Close: {
         painter.drawLine(QPointF(s * 0.3, s * 0.3), QPointF(s * 0.7, s * 0.7));
         painter.drawLine(QPointF(s * 0.7, s * 0.3), QPointF(s * 0.3, s * 0.7));

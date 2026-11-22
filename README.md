@@ -20,8 +20,8 @@ disassembler, a debugger, a plugin runtime and code-signed installers are *not* 
 ## What works today
 
 **Shell and workspace**
-- Activity bar with Explorer, project Search, Recent and Help sections, plus a resizable
-  explorer tree backed by `QFileSystemModel`.
+- Activity bar with Explorer, project Search, Recent, GameForge and Help sections, plus a
+  resizable explorer tree backed by `QFileSystemModel`.
 - Editor area with multiple tabs, per-file header strip (`read-only`, format, summary).
 - Bottom output panel with a live log and a diagnostics tab; resizable splitter layout.
 - Welcome page with open-file / open-project / new-project / recent actions.
@@ -29,6 +29,18 @@ disassembler, a debugger, a plugin runtime and code-signed installers are *not* 
   memory and current theme.
 - Command palette (`Ctrl+Shift+P`) generated from the real command registry.
 - Drag and drop of files and folders, session restore, recent files/projects.
+
+**GameForge (game projects)**
+- `Ctrl+Shift+G` opens the GameForge workspace for a local game project folder: a bounded,
+  cancellable background scan (no symbolic links, no writes to the project) detects CMake,
+  Meson, Makefile, Godot, Unity and Unreal projects from marker files and shows a
+  categorised folder tree with per-file sizes, a name/folder/category filter and
+  open-in-hex-editor.
+- *Analyze portability* reads source-like files and reports known API families (Win32,
+  Direct3D, Metal, OpenGL, Vulkan, SDL, GLFW, XInput, XAudio2, CoreAudio, OpenAL,
+  FMOD/Wwise, pthread, std::thread) with match counts and a `file:line` example. The report
+  states its own limits: it is textual evidence for a port, not an automatic port, a build
+  result or a verdict.
 
 **Analysis core**
 - Signature-based parser registry with a raw-bytes fallback and honest warnings for
@@ -152,7 +164,10 @@ this Linux environment yet; the checklist in `packaging/windows/README.md` still
 
 Disassembler / Capstone integration, LLDB debugging, AI Studio, plugin runtime, the modding
 studio workflows (diffs, patch history, validation), license manager, code signing and an
-auto-updater, PS5 PKG support, content extraction, and any DRM or console-security bypass. Hex editing cannot
+auto-updater, PS5 PKG support, content extraction, and any DRM or console-security bypass.
+GameForge's mod workbench, asset replacement, performance lab, build execution and project
+export are **not implemented**; the project scanner and portability report are the only
+GameForge parts that work. Hex editing cannot
 insert or delete bytes yet. The Developer Console workspace currently exists only as the
 Output/Diagnostics panel — there is no interactive integrated terminal. Panels are resizable
 split views, not freely dockable windows.

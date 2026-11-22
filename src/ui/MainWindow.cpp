@@ -15,6 +15,7 @@
 #include "ui/EditorArea.h"
 #include "ui/FileEditor.h"
 #include "ui/FileExplorer.h"
+#include "ui/GameForgePanel.h"
 #include "ui/HelpDialog.h"
 #include "ui/HexView.h"
 #include "ui/StructurePanel.h"
@@ -244,6 +245,9 @@ void MainWindow::buildUi()
                         IconKind::Search);
     m_activity->addItem(QStringLiteral("recent"), QStringLiteral("Recent files"),
                         IconKind::Recent);
+    m_activity->addItem(QStringLiteral("gameforge"),
+                        QStringLiteral("GameForge: project inventory, porting evidence"),
+                        IconKind::GameForge);
     m_activity->addStretch();
     m_activity->addItem(QStringLiteral("themes"), QStringLiteral("Theme editor"),
                         IconKind::Palette, false);
@@ -259,9 +263,11 @@ void MainWindow::buildUi()
     m_explorer = new FileExplorer(m_sideStack);
     m_searchPanel = new SearchPanel(m_sideStack);
     m_recentPanel = new RecentPanel(m_sideStack);
+    m_gameForge = new GameForgePanel(m_sideStack);
     m_sideStack->addWidget(m_explorer);
     m_sideStack->addWidget(m_searchPanel);
     m_sideStack->addWidget(m_recentPanel);
+    m_sideStack->addWidget(m_gameForge);
     centralLayout->addWidget(m_sideStack);
 
     // Left pane: activity bar + stacked side panels. It is one child of the
@@ -341,6 +347,12 @@ void MainWindow::buildUi()
                 if (auto* editor = currentEditor())
                     editor->goToOffset(offset);
             });
+    connect(m_gameForge, &GameForgePanel::openFileRequested, this,
+            [this](const QString& path) { openFile(path); });
+    connect(m_gameForge, &GameForgePanel::openProjectRequested, this,
+            [this]() { runCommand(QStringLiteral("file.openProject")); });
+    connect(m_gameForge, &GameForgePanel::statusMessage, this,
+            [this](const QString& message) { statusBar()->showMessage(message, 6000); });
     connect(m_welcome, &WelcomePage::openFileRequested, this, [this]() {
         runCommand(QStringLiteral("file.openFile"));
     });
@@ -521,6 +533,12 @@ void MainWindow::buildCommands()
                    switchSidebar(QStringLiteral("recent"));
                    m_activity->setCurrent(QStringLiteral("recent"));
                });
+    addCommand(QStringLiteral("view.gameforge"),
+               QStringLiteral("GameForge: project workspace"), viewCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+G")), [this]() {
+                   switchSidebar(QStringLiteral("gameforge"));
+                   m_activity->setCurrent(QStringLiteral("gameforge"));
+               });
     addCommand(QStringLiteral("view.togglePanel"), QStringLiteral("Toggle output panel"),
                viewCategory, QKeySequence(QStringLiteral("Ctrl+J")),
                [this]() { m_output->setVisible(!m_output->isVisible()); });
@@ -611,6 +629,10 @@ void MainWindow::buildCommands()
     addCommand(QStringLiteral("help.structureTemplates"),
                QStringLiteral("Structure template guide"), helpCategory, QKeySequence(),
                [this]() { showHelpTopic(QStringLiteral("help.structureTemplates")); });
+    addCommand(QStringLiteral("help.gameforge"), QStringLiteral("GameForge workspace guide"),
+               helpCategory, QKeySequence(), [this]() {
+                   showHelpTopic(QStringLiteral("help.gameforge"));
+               });
     addCommand(QStringLiteral("help.limitations"), QStringLiteral("Limitations and scope"),
                helpCategory, QKeySequence(),
                [this]() { showHelpTopic(QStringLiteral("help.limitations")); });
@@ -685,6 +707,9 @@ void MainWindow::buildCommands()
              QStringLiteral("find project"));
     describe(QStringLiteral("view.recent"), QStringLiteral("Show recently opened files"),
              QStringLiteral("history"));
+    describe(QStringLiteral("view.gameforge"),
+             QStringLiteral("GameForge: project inventory, sizes and porting evidence"),
+             QStringLiteral("game port modding assets project scanner porting api"));
     describe(QStringLiteral("view.togglePanel"), QStringLiteral("Show or hide the output panel"),
              QStringLiteral("diagnostics log panel"));
     describe(QStringLiteral("view.themeEditor"), QStringLiteral("Open the theme editor"),
@@ -758,6 +783,9 @@ void MainWindow::buildCommands()
     describe(QStringLiteral("help.structureTemplates"),
              QStringLiteral("Offline guide to the structure template schema"),
              QStringLiteral("documentation schema json layout"));
+    describe(QStringLiteral("help.gameforge"),
+             QStringLiteral("How the project scan and portability report work"),
+             QStringLiteral("game port inventory evidence api documentation"));
     describe(QStringLiteral("help.limitations"),
              QStringLiteral("What is intentionally not supported or confirmed"),
              QStringLiteral("scope documentation honesty"));
@@ -852,6 +880,8 @@ void MainWindow::buildMenus()
     viewMenu->addAction(m_commands.value(QStringLiteral("view.clearWallpaper")));
 
     auto* toolsMenu = menuBar()->addMenu(QStringLiteral("&Tools"));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("view.gameforge")));
+    toolsMenu->addSeparator();
     toolsMenu->addAction(m_commands.value(QStringLiteral("tools.ai")));
     toolsMenu->addSeparator();
     toolsMenu->addAction(m_commands.value(QStringLiteral("tools.settings")));
@@ -869,6 +899,7 @@ void MainWindow::buildMenus()
     helpMenu->addAction(m_commands.value(QStringLiteral("help.shortcuts")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.structureTemplates")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.codeListing")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.gameforge")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.ai")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.limitations")));
     helpMenu->addSeparator();
@@ -1037,6 +1068,10 @@ void MainWindow::switchSidebar(const QString& id)
         m_sideStack->setCurrentWidget(m_recentPanel);
         return;
     }
+    if (id == QLatin1String("gameforge")) {
+        m_sideStack->setCurrentWidget(m_gameForge);
+        return;
+    }
     m_sideStack->setCurrentWidget(m_explorer);
 }
 
@@ -1115,6 +1150,7 @@ void MainWindow::setProjectPath(const QString& path)
     m_projectPath = path;
     m_explorer->setRootPath(path);
     m_searchPanel->setRootPath(path);
+    m_gameForge->setProjectRoot(path);
     m_welcome->setProjectName(QFileInfo(path).fileName());
     if (!path.isEmpty()) {
         m_settings.lastProject = path;

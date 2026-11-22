@@ -14,6 +14,7 @@ enum class IconKind {
     Settings,
     Palette,
     Diagnostics,
+    GameForge,
     Close,
 };
 

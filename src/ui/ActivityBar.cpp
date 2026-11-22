@@ -71,6 +71,7 @@ void ActivityBar::setIconColor(const QColor& color)
         {QStringLiteral("settings"), IconKind::Settings},
         {QStringLiteral("themes"), IconKind::Palette},
         {QStringLiteral("diagnostics"), IconKind::Diagnostics},
+        {QStringLiteral("gameforge"), IconKind::GameForge},
     };
     for (auto it = m_buttons.begin(); it != m_buttons.end(); ++it) {
         const auto kind = kinds.constFind(it.key());

@@ -34,6 +34,7 @@ class AiChatPanel;
 class EditorArea;
 class FileEditor;
 class FileExplorer;
+class GameForgePanel;
 class OutputPanel;
 class RecentPanel;
 class SearchPanel;
@@ -143,6 +144,7 @@ private:
     FileExplorer* m_explorer = nullptr;
     SearchPanel* m_searchPanel = nullptr;
     RecentPanel* m_recentPanel = nullptr;
+    GameForgePanel* m_gameForge = nullptr;
 
     QSplitter* m_mainSplitter = nullptr;
     QSplitter* m_verticalSplitter = nullptr;
