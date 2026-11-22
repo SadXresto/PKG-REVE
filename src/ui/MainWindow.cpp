@@ -376,6 +376,27 @@ void MainWindow::buildUi()
                     openFile(path);
             });
     connect(m_output, &OutputPanel::exportLogRequested, this, &MainWindow::exportLog);
+    connect(m_output, &OutputPanel::sourceRequested, this,
+            [this](const QString& file, int line) {
+                const QFileInfo info(file);
+                const QString path = info.isAbsolute()
+                    ? file
+                    : QDir(m_projectPath.isEmpty() ? QDir::currentPath() : m_projectPath)
+                          .filePath(file);
+                if (!QFileInfo(path).isFile()) {
+                    statusBar()->showMessage(
+                        QStringLiteral("Referenced file was not found: %1").arg(file), 5000);
+                    return;
+                }
+                openFile(path);
+                statusBar()->showMessage(
+                    line > 0
+                        ? QStringLiteral("Opened %1 \u00B7 line %2")
+                              .arg(QFileInfo(path).fileName())
+                              .arg(line)
+                        : QStringLiteral("Opened %1").arg(QFileInfo(path).fileName()),
+                    4000);
+            });
 }
 
 void MainWindow::buildStatusBar()
@@ -515,6 +536,28 @@ void MainWindow::buildCommands()
                QKeySequence(QStringLiteral("Ctrl+Shift+End")), [this]() {
                    if (FileEditor* editor = currentEditor())
                        editor->hexView()->selectAll();
+               });
+
+    addCommand(QStringLiteral("hex.bookmark"), QStringLiteral("Toggle bookmark at cursor"),
+               editCategory, QKeySequence(QStringLiteral("Ctrl+F2")), [this]() {
+                   if (FileEditor* editor = currentEditor())
+                       editor->toggleBookmark(editor->hexView()->cursorOffset());
+               });
+    addCommand(QStringLiteral("hex.nextBookmark"), QStringLiteral("Jump to next bookmark"),
+               editCategory, QKeySequence(QStringLiteral("F2")), [this]() {
+                   if (FileEditor* editor = currentEditor())
+                       editor->nextBookmark();
+               });
+    addCommand(QStringLiteral("hex.previousBookmark"),
+               QStringLiteral("Jump to previous bookmark"), editCategory,
+               QKeySequence(QStringLiteral("Shift+F2")), [this]() {
+                   if (FileEditor* editor = currentEditor())
+                       editor->previousBookmark();
+               });
+    addCommand(QStringLiteral("hex.compare"), QStringLiteral("Compare active file\u2026"),
+               editCategory, QKeySequence(), [this]() {
+                   if (FileEditor* editor = currentEditor())
+                       editor->compareWithFile();
                });
 
     addCommand(QStringLiteral("view.explorer"), QStringLiteral("Show explorer"), viewCategory,

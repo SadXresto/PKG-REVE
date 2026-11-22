@@ -1,5 +1,7 @@
 #include "ui/FileEditor.h"
 
+#include "ui/CompareDialog.h"
+
 #include "core/FormatUtil.h"
 #include "core/Logging.h"
 #include "core/SafeMath.h"
@@ -7,13 +9,16 @@
 #include "ui/PackageInfoView.h"
 #include "ui/StructurePanel.h"
 
+#include <QAction>
 #include <QCheckBox>
+#include <QCursor>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QRegularExpression>
@@ -91,6 +96,22 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
     m_summaryLabel->setObjectName(QStringLiteral("hintLabel"));
     headerLayout->addWidget(m_summaryLabel, 1);
 
+    m_undoButton = new QToolButton(header);
+    m_undoButton->setObjectName(QStringLiteral("hintLabel"));
+    m_undoButton->setAutoRaise(true);
+    m_undoButton->setText(QStringLiteral("Undo"));
+    m_undoButton->setToolTip(QStringLiteral("Undo the last byte edit (Ctrl+Z)"));
+    m_undoButton->setEnabled(false);
+    headerLayout->addWidget(m_undoButton);
+
+    m_redoButton = new QToolButton(header);
+    m_redoButton->setObjectName(QStringLiteral("hintLabel"));
+    m_redoButton->setAutoRaise(true);
+    m_redoButton->setText(QStringLiteral("Redo"));
+    m_redoButton->setToolTip(QStringLiteral("Redo the last undone byte edit (Ctrl+Shift+Z)"));
+    m_redoButton->setEnabled(false);
+    headerLayout->addWidget(m_redoButton);
+
     m_editToggle = new QToolButton(header);
     m_editToggle->setObjectName(QStringLiteral("hintLabel"));
     m_editToggle->setCheckable(true);
@@ -136,6 +157,44 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
     m_hexSplitter->setStretchFactor(1, 2);
     m_hexSplitter->setSizes({660, 570});
     hexLayout->addWidget(m_hexSplitter, 1);
+
+    // Compact information strip: identity and live cursor state at a glance.
+    auto* infoStrip = new QWidget(hexPage);
+    infoStrip->setObjectName(QStringLiteral("hexInfoStrip"));
+    auto* infoLayout = new QHBoxLayout(infoStrip);
+    infoLayout->setContentsMargins(10, 4, 10, 4);
+    infoLayout->setSpacing(8);
+    const auto addInfo = [&](QLabel*& label, const QString& tip) {
+        label = new QLabel(infoStrip);
+        label->setObjectName(QStringLiteral("hexInfoLabel"));
+        label->setToolTip(tip);
+        label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        infoLayout->addWidget(label);
+    };
+    addInfo(m_infoName, QStringLiteral("File name"));
+    auto* separatorOne = new QLabel(QStringLiteral("\u00B7"), infoStrip);
+    separatorOne->setObjectName(QStringLiteral("hexInfoSeparator"));
+    infoLayout->addWidget(separatorOne);
+    addInfo(m_infoSize, QStringLiteral("File size on disk"));
+    auto* separatorTwo = new QLabel(QStringLiteral("\u00B7"), infoStrip);
+    separatorTwo->setObjectName(QStringLiteral("hexInfoSeparator"));
+    infoLayout->addWidget(separatorTwo);
+    addInfo(m_infoOffset, QStringLiteral("Cursor offset"));
+    auto* separatorThree = new QLabel(QStringLiteral("\u00B7"), infoStrip);
+    separatorThree->setObjectName(QStringLiteral("hexInfoSeparator"));
+    infoLayout->addWidget(separatorThree);
+    addInfo(m_infoSelection, QStringLiteral("Selected bytes"));
+    infoLayout->addStretch(1);
+    m_bookmarkButton = new QToolButton(infoStrip);
+    m_bookmarkButton->setObjectName(QStringLiteral("editToggle"));
+    m_bookmarkButton->setAutoRaise(true);
+    m_bookmarkButton->setText(QStringLiteral("Bookmarks"));
+    m_bookmarkButton->setToolTip(
+        QStringLiteral("Add, jump to and annotate bookmarks. Bookmarks are kept in the "
+                       "workspace, never written into the file."));
+    infoLayout->addWidget(m_bookmarkButton);
+    addInfo(m_infoMode, QStringLiteral("Active hex view mode"));
+    hexLayout->addWidget(infoStrip);
 
     // Find bar -----------------------------------------------------------
     m_findBar = new QWidget(hexPage);
@@ -305,6 +364,16 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
     connect(m_hex, &HexView::findRequested, this, [this]() { showFindBar(true); });
     connect(m_hex, &HexView::gotoRequested, this, &FileEditor::goToOffsetInteractive);
     connect(m_hex, &HexView::documentEdited, this, &FileEditor::refreshEditState);
+    connect(m_hex, &HexView::bookmarkToggleRequested, this, &FileEditor::toggleBookmark);
+    connect(m_hex, &HexView::bookmarkNoteRequested, this, &FileEditor::addBookmarkWithNote);
+    connect(m_hex, &HexView::compareRequested, this, [this](quint64) { compareWithFile(); });
+    connect(m_hex, &HexView::cursorMoved, this, [this](quint64) { updateHexInfoStrip(); });
+    connect(m_hex, &HexView::selectionChanged, this, [this](quint64, quint64) {
+        updateHexInfoStrip();
+    });
+    connect(m_undoButton, &QToolButton::clicked, this, &FileEditor::undoEdit);
+    connect(m_redoButton, &QToolButton::clicked, this, &FileEditor::redoEdit);
+    connect(m_bookmarkButton, &QToolButton::clicked, this, &FileEditor::showBookmarkList);
     connect(m_editToggle, &QToolButton::toggled, this, [this](bool enabled) {
         setEditingEnabled(enabled);
     });
@@ -344,6 +413,8 @@ FileEditor::FileEditor(std::shared_ptr<HexDocument> document, QWidget* parent)
     m_watcher = std::make_shared<QFutureWatcher<Result<SearchResult>>>();
     connect(m_watcher.get(), &QFutureWatcher<Result<SearchResult>>::finished, this,
             &FileEditor::onSearchFinished);
+
+    updateHexInfoStrip();
 }
 
 QString FileEditor::path() const
@@ -374,7 +445,126 @@ void FileEditor::refreshEditState()
     if (m_structurePanel != nullptr)
         m_structurePanel->refresh();
     updateTitleLabel();
+    if (m_undoButton != nullptr)
+        m_undoButton->setEnabled(m_document != nullptr && m_document->canUndo());
+    if (m_redoButton != nullptr)
+        m_redoButton->setEnabled(m_document != nullptr && m_document->canRedo());
+    updateHexInfoStrip();
     emit modificationChanged(isModified());
+}
+
+void FileEditor::updateHexInfoStrip()
+{
+    if (m_infoName == nullptr || m_document == nullptr)
+        return;
+    m_infoName->setText(QStringLiteral("\u25C6 %1").arg(QFileInfo(path()).fileName()));
+    m_infoSize->setText(fmt::humanBytes(m_document->size()));
+    m_infoOffset->setText(QStringLiteral("offset 0x%1")
+                              .arg(m_hex->cursorOffset(),
+                                   m_hex->layout().normalized().bytesPerRow >= 32 ? 8 : 6, 16,
+                                   QLatin1Char('0'))
+                              .toUpper());
+    const quint64 selected = m_hex->selectionLength();
+    m_infoSelection->setText(selected > 1
+                                 ? QStringLiteral("%1 byte(s) selected").arg(selected)
+                                 : QStringLiteral("no selection"));
+    m_infoMode->setText(m_hex->isCursorInAscii() ? QStringLiteral("ASCII")
+                                                 : QStringLiteral("HEX"));
+    m_bookmarkButton->setText(m_bookmarks.isEmpty()
+                                  ? QStringLiteral("Bookmarks")
+                                  : QStringLiteral("Bookmarks (%1)").arg(m_bookmarks.count()));
+}
+
+void FileEditor::refreshBookmarkMarkers()
+{
+    m_hex->setBookmarks(m_bookmarks.offsets());
+    updateHexInfoStrip();
+}
+
+void FileEditor::toggleBookmark(quint64 offset)
+{
+    m_bookmarks.toggle(offset);
+    refreshBookmarkMarkers();
+}
+
+void FileEditor::addBookmarkWithNote(quint64 offset)
+{
+    bool accepted = false;
+    const QString existing = m_bookmarks.note(offset);
+    const QString note = QInputDialog::getText(
+        this, QStringLiteral("Bookmark note"),
+        QStringLiteral("Note for offset 0x%1").arg(offset, 0, 16),
+        QLineEdit::Normal, existing, &accepted);
+    if (!accepted)
+        return;
+    m_bookmarks.add(offset, note.trimmed());
+    refreshBookmarkMarkers();
+}
+
+bool FileEditor::nextBookmark()
+{
+    const auto target = m_bookmarks.next(m_hex->cursorOffset());
+    if (!target)
+        return false;
+    m_hex->goToOffset(*target);
+    m_hex->setFocus(Qt::OtherFocusReason);
+    return true;
+}
+
+bool FileEditor::previousBookmark()
+{
+    const auto target = m_bookmarks.previous(m_hex->cursorOffset());
+    if (!target)
+        return false;
+    m_hex->goToOffset(*target);
+    m_hex->setFocus(Qt::OtherFocusReason);
+    return true;
+}
+
+void FileEditor::showBookmarkList()
+{
+    QMenu menu(this);
+    const QList<HexBookmark> bookmarks = m_bookmarks.all();
+    if (bookmarks.isEmpty()) {
+        QAction* empty = menu.addAction(QStringLiteral("No bookmarks yet"));
+        empty->setEnabled(false);
+        menu.addSeparator();
+        QAction* add = menu.addAction(QStringLiteral("Bookmark the cursor"));
+        connect(add, &QAction::triggered, this,
+                [this]() { toggleBookmark(m_hex->cursorOffset()); });
+    } else {
+        for (const HexBookmark& bookmark : bookmarks) {
+            const QString label = bookmark.note.isEmpty()
+                ? QStringLiteral("0x%1").arg(bookmark.offset, 0, 16)
+                : QStringLiteral("0x%1 \u2014 %2").arg(bookmark.offset, 0, 16, QLatin1Char('0'))
+                      .arg(bookmark.note);
+            QAction* action = menu.addAction(label);
+            connect(action, &QAction::triggered, this, [this, offset = bookmark.offset]() {
+                m_hex->goToOffset(offset);
+                m_hex->setFocus(Qt::OtherFocusReason);
+            });
+        }
+        menu.addSeparator();
+        QAction* clear = menu.addAction(QStringLiteral("Remove all bookmarks"));
+        connect(clear, &QAction::triggered, this, [this]() {
+            m_bookmarks.clear();
+            refreshBookmarkMarkers();
+        });
+    }
+    menu.exec(QCursor::pos());
+}
+
+void FileEditor::compareWithFile()
+{
+    if (m_document == nullptr)
+        return;
+    CompareDialog dialog(path(), this);
+    connect(&dialog, &CompareDialog::offsetActivated, this, [this](quint64 offset) {
+        m_tabs->setCurrentIndex(0);
+        m_hex->goToOffset(offset);
+        m_hex->setFocus(Qt::OtherFocusReason);
+    });
+    dialog.exec();
 }
 
 void FileEditor::showStructurePanel(bool visible)
@@ -447,6 +637,7 @@ bool FileEditor::redoEdit()
     refreshEditState();
     return true;
 }
+
 
 Result<quint64> FileEditor::saveTo(const QString& path)
 {

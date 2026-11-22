@@ -57,6 +57,11 @@ public:
     void setSearchHits(const QVector<quint64>& offsets, int patternLength);
     void clearSearchHits();
 
+    /// Marks bookmark offsets in the gutter. Navigation lives in FileEditor;
+    /// the view only renders the markers and reports the context-menu clicks.
+    void setBookmarks(const QVector<quint64>& offsets);
+    [[nodiscard]] bool isCursorInAscii() const { return m_cursorInAscii; }
+
     /// Underlines and tints byte ranges that matched documented signatures.
     void setSignatures(const QVector<SignatureHit>& signatures);
     void clearSignatures();
@@ -78,6 +83,9 @@ signals:
     void findRequested();
     void gotoRequested();
     void copyRequested();
+    void bookmarkToggleRequested(quint64 offset);
+    void bookmarkNoteRequested(quint64 offset);
+    void compareRequested(quint64 offset);
     void documentEdited();
     void hovered(quint64 offset);
     void hoverCleared();
@@ -139,6 +147,7 @@ private:
     bool m_windowValid = false;
 
     QVector<quint64> m_searchHits;
+    QVector<quint64> m_bookmarks;
     int m_patternLength = 1;
     int m_currentHit = -1;
     QVector<SignatureHit> m_signatures;

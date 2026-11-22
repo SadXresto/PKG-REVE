@@ -3,6 +3,7 @@
 #include "core/ByteSearch.h"
 #include "core/CodeListing.h"
 #include "core/FormatInfo.h"
+#include "core/HexBookmarks.h"
 #include "core/HexDocument.h"
 #include "ui/HexView.h"
 
@@ -68,6 +69,16 @@ public:
     void showFindBar(bool visible);
     void focusFindBar();
 
+    /// Bookmarks are navigation aids kept outside the file bytes.
+    void toggleBookmark(quint64 offset);
+    void addBookmarkWithNote(quint64 offset);
+    [[nodiscard]] bool nextBookmark();
+    [[nodiscard]] bool previousBookmark();
+    void showBookmarkList();
+    [[nodiscard]] QList<pkg::HexBookmark> bookmarks() const { return m_bookmarks.all(); }
+    /// Opens the binary comparison view against another file.
+    void compareWithFile();
+
     /// Structure builder lives beside the hex view so tree selections can
     /// highlight bytes without hiding either side.
     void showStructurePanel(bool visible);
@@ -102,11 +113,15 @@ private:
     void updateTitleLabel();
     void positionInspector();
     void replaceAll();
+    void updateHexInfoStrip();
+    void refreshBookmarkMarkers();
 
     std::shared_ptr<HexDocument> m_document;
     QLabel* m_titleLabel = nullptr;
     QLabel* m_formatLabel = nullptr;
     QLabel* m_summaryLabel = nullptr;
+    QToolButton* m_undoButton = nullptr;
+    QToolButton* m_redoButton = nullptr;
     QToolButton* m_editToggle = nullptr;
     QToolButton* m_structureToggle = nullptr;
     QTabWidget* m_tabs = nullptr;
@@ -127,6 +142,14 @@ private:
     QLabel* m_findStatus = nullptr;
     QToolButton* m_previousButton = nullptr;
     QToolButton* m_nextButton = nullptr;
+
+    QLabel* m_infoName = nullptr;
+    QLabel* m_infoSize = nullptr;
+    QLabel* m_infoOffset = nullptr;
+    QLabel* m_infoSelection = nullptr;
+    QLabel* m_infoMode = nullptr;
+    QToolButton* m_bookmarkButton = nullptr;
+    pkg::HexBookmarks m_bookmarks;
 
     PackageInfo m_info;
     bool m_hasAnalysis = false;

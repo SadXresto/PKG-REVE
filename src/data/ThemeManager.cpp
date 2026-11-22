@@ -200,6 +200,25 @@ QLabel#signatureBadge {
 QWidget#replaceBar {
     background-color: @glassPanel; border-top: 1px solid @edge;
 }
+QWidget#hexInfoStrip {
+    background-color: @glassHeader; border-top: 1px solid @edge;
+}
+QLabel#hexInfoLabel { color: @panelText; }
+QLabel#hexInfoSeparator { color: @gutter; }
+QListWidget#settingsCategories {
+    background-color: transparent; border: none; padding: 4px;
+}
+QListWidget#settingsCategories::item {
+    padding: 8px 10px; border-radius: 7px; margin: 1px 0;
+}
+QListWidget#settingsCategories::item:selected {
+    background-color: @accentWash; color: @highlightedText;
+    border-left: 2px solid @accent;
+}
+QFrame#settingsInfoCard {
+    background-color: @glassPanel; border: 1px solid @edge; border-radius: 9px;
+}
+QWidget#settingsPage QWidget { background: transparent; }
 QKeySequenceEdit { padding: 1px 3px; }
 )");
 }

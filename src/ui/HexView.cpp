@@ -3,6 +3,8 @@
 #include "core/FormatUtil.h"
 #include "data/ThemeManager.h"
 
+#include <QApplication>
+#include <QClipboard>
 #include <QContextMenuEvent>
 #include <QEvent>
 #include <QFontDatabase>
@@ -84,6 +86,7 @@ void HexView::setDocument(std::shared_ptr<HexDocument> document)
     m_windowValid = false;
     m_window.clear();
     m_searchHits.clear();
+    m_bookmarks.clear();
     m_currentHit = -1;
     m_signatures.clear();
     m_pendingHighNibble = -1;
@@ -330,6 +333,14 @@ void HexView::paintEvent(QPaintEvent*)
         painter.setPen(gutterColor);
         painter.drawLine(m_metrics.gutterWidth - 4 - m_xOffset, y,
                          m_metrics.gutterWidth - 4 - m_xOffset, y + rowHeight);
+
+        // Bookmark marker: a solid accent bar on the row holding a bookmark.
+        for (const quint64 bookmark : m_bookmarks) {
+            if (bookmark >= rowStart && bookmark < rowStart + available) {
+                painter.fillRect(QRect(2 - m_xOffset, y + 2, 3, rowHeight - 4), accentColor);
+                break;
+            }
+        }
 
         for (qsizetype column = 0; column < rowData.size(); ++column) {
             const quint64 offset = rowStart + static_cast<quint64>(column);
@@ -699,12 +710,22 @@ void HexView::contextMenuEvent(QContextMenuEvent* event)
         QAbstractScrollArea::contextMenuEvent(event);
         return;
     }
+    const std::optional<quint64> clicked = offsetAt(event->pos());
+    const quint64 target = clicked.value_or(m_cursor);
+    if (clicked)
+        setCursor(target, false);
+
     QMenu menu(this);
     QAction* copyHex = menu.addAction(QStringLiteral("Copy selection as hex"));
     QAction* copyAscii = menu.addAction(QStringLiteral("Copy selection as ASCII"));
+    QAction* copyOffset = menu.addAction(QStringLiteral("Copy offset"));
     menu.addSeparator();
     QAction* find = menu.addAction(QStringLiteral("Find\u2026"));
     QAction* goTo = menu.addAction(QStringLiteral("Go to offset\u2026"));
+    menu.addSeparator();
+    QAction* toggleBookmark = menu.addAction(QStringLiteral("Toggle bookmark here"));
+    QAction* annotateBookmark = menu.addAction(QStringLiteral("Bookmark with note\u2026"));
+    QAction* compare = menu.addAction(QStringLiteral("Compare with another file\u2026"));
     menu.addSeparator();
     QAction* selectAllAction = menu.addAction(QStringLiteral("Select all"));
     const bool hasSelection = selectionLength() > 1;
@@ -714,10 +735,19 @@ void HexView::contextMenuEvent(QContextMenuEvent* event)
     QAction* chosen = menu.exec(event->globalPos());
     if (chosen == copyHex || chosen == copyAscii)
         emit copyRequested();
-    else if (chosen == find)
+    else if (chosen == copyOffset) {
+        QApplication::clipboard()->setText(
+            QStringLiteral("0x%1").arg(target, 0, 16));
+    } else if (chosen == find)
         emit findRequested();
     else if (chosen == goTo)
         emit gotoRequested();
+    else if (chosen == toggleBookmark)
+        emit bookmarkToggleRequested(target);
+    else if (chosen == annotateBookmark)
+        emit bookmarkNoteRequested(target);
+    else if (chosen == compare)
+        emit compareRequested(target);
     else if (chosen == selectAllAction)
         selectAll();
 }
@@ -822,6 +852,12 @@ void HexView::clearSearchHits()
 {
     m_searchHits.clear();
     m_currentHit = -1;
+    viewport()->update();
+}
+
+void HexView::setBookmarks(const QVector<quint64>& offsets)
+{
+    m_bookmarks = offsets;
     viewport()->update();
 }
 

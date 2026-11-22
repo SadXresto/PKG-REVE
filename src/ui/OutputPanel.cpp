@@ -1,18 +1,49 @@
 #include "ui/OutputPanel.h"
 
+#include "core/FormatUtil.h"
+
+#include <QAction>
+#include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLineEdit>
+#include <QMenu>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRegularExpression>
+#include <QScrollBar>
 #include <QTabWidget>
+#include <QTextBlock>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
 namespace pkg::ui {
+namespace {
+
+/// Matches absolute and relative "path:line" or "path:line:column" references
+/// in compiler and tool output.
+const QRegularExpression& sourcePattern()
+{
+    static const QRegularExpression pattern(
+        QStringLiteral(R"(([A-Za-z]:[\\/][^\s:]+|(?:\.{0,2}[\\/])?[^\s:]+\.(?:cpp|cxx|cc|c|h|hpp|cmake|txt|godot|meson|py|json|md|rs|go|java|kt|cs|ts|tsx|js|jsx)):(\d+)(?::(\d+))?)"));
+    return pattern;
+}
+
+const QRegularExpression& secretPattern()
+{
+    static const QRegularExpression pattern(
+        QStringLiteral(R"(((?:api[_-]?key|apikey|token|secret|password|passwd|authorization)\s*[:=]\s*)((?:Bearer\s+)?[^\s,;]+))"),
+        QRegularExpression::CaseInsensitiveOption);
+    return pattern;
+}
+
+}  // namespace
 
 OutputPanel::OutputPanel(QWidget* parent) : QWidget(parent)
 {
@@ -44,15 +75,37 @@ OutputPanel::OutputPanel(QWidget* parent) : QWidget(parent)
     m_filter->addItems({QStringLiteral("Debug"), QStringLiteral("Info"),
                         QStringLiteral("Warning"), QStringLiteral("Error")});
     m_filter->setCurrentIndex(1);
+    m_filter->setToolTip(QStringLiteral("Minimum level shown in the output"));
     toolbarLayout->addWidget(m_filter);
-    toolbarLayout->addStretch(1);
 
-    m_autoScroll = new QCheckBox(QStringLiteral("Follow output"), toolbar);
+    m_search = new QLineEdit(toolbar);
+    m_search->setPlaceholderText(QStringLiteral("Filter output\\u2026"));
+    m_search->setClearButtonEnabled(true);
+    m_search->setMaximumWidth(240);
+    toolbarLayout->addWidget(m_search);
+
+    m_timestamps = new QCheckBox(QStringLiteral("Timestamps"), toolbar);
+    m_timestamps->setChecked(true);
+    toolbarLayout->addWidget(m_timestamps);
+
+    m_autoScroll = new QCheckBox(QStringLiteral("Follow"), toolbar);
     m_autoScroll->setChecked(true);
+    m_autoScroll->setToolTip(QStringLiteral("Scroll to the newest record automatically"));
     toolbarLayout->addWidget(m_autoScroll);
 
+    m_pause = new QPushButton(QStringLiteral("Pause"), toolbar);
+    m_pause->setCheckable(true);
+    m_pause->setToolTip(
+        QStringLiteral("Pause automatic scrolling. New output is still recorded."));
+    toolbarLayout->addWidget(m_pause);
+
+    toolbarLayout->addStretch(1);
+
+    auto* copyButton = new QPushButton(QStringLiteral("Copy"), toolbar);
+    copyButton->setToolTip(QStringLiteral("Copy selected output, or everything visible"));
     auto* clearButton = new QPushButton(QStringLiteral("Clear"), toolbar);
-    auto* exportButton = new QPushButton(QStringLiteral("Export\u2026"), toolbar);
+    auto* exportButton = new QPushButton(QStringLiteral("Export\\u2026"), toolbar);
+    toolbarLayout->addWidget(copyButton);
     toolbarLayout->addWidget(clearButton);
     toolbarLayout->addWidget(exportButton);
     outputLayout->addWidget(toolbar);
@@ -61,6 +114,7 @@ OutputPanel::OutputPanel(QWidget* parent) : QWidget(parent)
     m_output->setReadOnly(true);
     m_output->setLineWrapMode(QPlainTextEdit::NoWrap);
     m_output->setMaximumBlockCount(6000);
+    m_output->setContextMenuPolicy(Qt::CustomContextMenu);
     outputLayout->addWidget(m_output, 1);
     m_tabs->addTab(outputTab, QStringLiteral("Output"));
 
@@ -80,9 +134,30 @@ OutputPanel::OutputPanel(QWidget* parent) : QWidget(parent)
     m_tabs->addTab(diagnosticsTab, QStringLiteral("Diagnostics"));
     m_tabs->setTabToolTip(1, QStringLiteral("Parser warnings for the active file"));
 
-    connect(clearButton, &QPushButton::clicked, this, &OutputPanel::clearLog);
+    connect(clearButton, &QPushButton::clicked, this, &OutputPanel::confirmClear);
     connect(exportButton, &QPushButton::clicked, this, &OutputPanel::exportLogRequested);
+    connect(copyButton, &QPushButton::clicked, this, &OutputPanel::copySelection);
     connect(m_filter, &QComboBox::currentIndexChanged, this, [this](int) { rebuild(); });
+    connect(m_search, &QLineEdit::textChanged, this, [this](const QString&) { rebuild(); });
+    connect(m_timestamps, &QCheckBox::toggled, this, [this](bool) { rebuild(); });
+    connect(m_pause, &QPushButton::toggled, this, &OutputPanel::togglePause);
+    connect(m_output, &QPlainTextEdit::customContextMenuRequested, this,
+            [this](const QPoint& position) {
+                QMenu menu(this);
+                QAction* copy = menu.addAction(QStringLiteral("Copy selection"));
+                copy->setEnabled(m_output->textCursor().hasSelection());
+                QAction* copyAll = menu.addAction(QStringLiteral("Copy visible output"));
+                menu.addSeparator();
+                QAction* clear = menu.addAction(QStringLiteral("Clear output\\u2026"));
+                QAction* chosen = menu.exec(m_output->mapToGlobal(position));
+                if (chosen == copy)
+                    copySelection();
+                else if (chosen == copyAll) {
+                    QApplication::clipboard()->setText(m_output->toPlainText());
+                } else if (chosen == clear)
+                    confirmClear();
+            });
+    m_output->viewport()->installEventFilter(this);
 
     m_flushTimer = new QTimer(this);
     m_flushTimer->setSingleShot(true);
@@ -90,6 +165,30 @@ OutputPanel::OutputPanel(QWidget* parent) : QWidget(parent)
     connect(m_flushTimer, &QTimer::timeout, this, &OutputPanel::flushPending);
 
     setDiagnostics({}, QStringLiteral("No file analyzed yet."));
+}
+
+QString OutputPanel::redactSecrets(const QString& text)
+{
+    QString result = text;
+    QRegularExpressionMatch match;
+    int offset = 0;
+    while ((match = secretPattern().match(result, offset)).hasMatch()) {
+        const QString replacement = match.captured(1) + QStringLiteral("***redacted***");
+        result.replace(match.capturedStart(0), match.capturedLength(0), replacement);
+        offset = match.capturedStart(0) + replacement.size();
+    }
+    return result;
+}
+
+QString OutputPanel::formatRecord(const pkg::LogRecord& record, bool timestamps)
+{
+    const QString message = redactSecrets(record.message);
+    if (!timestamps)
+        return QStringLiteral("[%1] [%2] %3")
+            .arg(Logger::levelName(record.level).leftJustified(5), record.category, message);
+    return QStringLiteral("%1 [%2] [%3] %4")
+        .arg(record.timestamp.toString(QStringLiteral("HH:mm:ss.zzz")),
+             Logger::levelName(record.level).leftJustified(5), record.category, message);
 }
 
 void OutputPanel::queueRecord(const pkg::LogRecord& record)
@@ -123,27 +222,39 @@ void OutputPanel::flushPending()
 bool OutputPanel::passesFilter(const LogRecord& record) const
 {
     const int minimum = m_filter->currentIndex();  // 0 debug, 1 info, 2 warning, 3 error
+    bool levelAccepted = true;
     switch (record.level) {
     case LogLevel::Trace:
     case LogLevel::Debug:
-        return minimum <= 0;
+        levelAccepted = minimum <= 0;
+        break;
     case LogLevel::Info:
-        return minimum <= 1;
+        levelAccepted = minimum <= 1;
+        break;
     case LogLevel::Warning:
-        return minimum <= 2;
+        levelAccepted = minimum <= 2;
+        break;
     case LogLevel::Error:
-        return minimum <= 3;
+        levelAccepted = minimum <= 3;
+        break;
     }
-    return true;
+    if (!levelAccepted)
+        return false;
+
+    const QString needle = m_search != nullptr ? m_search->text().trimmed() : QString();
+    if (needle.isEmpty())
+        return true;
+    return record.message.contains(needle, Qt::CaseInsensitive) ||
+           record.category.contains(needle, Qt::CaseInsensitive);
 }
 
 void OutputPanel::appendLine(const LogRecord& record)
 {
-    const QString line = QStringLiteral("%1 [%2] [%3] %4")
-                             .arg(record.timestamp.toString(QStringLiteral("HH:mm:ss.zzz")),
-                                  Logger::levelName(record.level).leftJustified(5),
-                                  record.category, record.message);
-    m_output->appendPlainText(line);
+    m_output->appendPlainText(formatRecord(record, m_timestamps->isChecked()));
+    if (!m_paused && m_autoScroll->isChecked()) {
+        auto* bar = m_output->verticalScrollBar();
+        bar->setValue(bar->maximum());
+    }
 }
 
 void OutputPanel::rebuild()
@@ -160,6 +271,58 @@ void OutputPanel::clearLog()
     m_records.clear();
     m_pending.clear();
     m_output->clear();
+}
+
+void OutputPanel::confirmClear()
+{
+    if (m_records.isEmpty()) {
+        clearLog();
+        return;
+    }
+    const auto answer = QMessageBox::question(
+        this, QStringLiteral("Clear output"),
+        QStringLiteral("Clear %1 output record(s)? This only clears the panel; the log file "
+                       "is kept.")
+            .arg(static_cast<int>(m_records.size())),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer == QMessageBox::Yes)
+        clearLog();
+}
+
+void OutputPanel::copySelection()
+{
+    const QString text = m_output->textCursor().hasSelection()
+        ? m_output->textCursor().selectedText().replace(QChar(0x2029), QLatin1Char('\n'))
+        : m_output->toPlainText();
+    QApplication::clipboard()->setText(text);
+}
+
+void OutputPanel::togglePause(bool paused)
+{
+    m_paused = paused;
+    m_pause->setText(paused ? QStringLiteral("Resume") : QStringLiteral("Pause"));
+    if (!paused && m_autoScroll->isChecked()) {
+        auto* bar = m_output->verticalScrollBar();
+        bar->setValue(bar->maximum());
+    }
+}
+
+void OutputPanel::activateLine()
+{
+    const QString line = m_output->textCursor().block().text();
+    const QRegularExpressionMatch match = sourcePattern().match(line);
+    if (!match.hasMatch())
+        return;
+    emit sourceRequested(match.captured(1), match.captured(2).toInt());
+}
+
+bool OutputPanel::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == m_output->viewport() && event->type() == QEvent::MouseButtonDblClick) {
+        activateLine();
+        return true;
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void OutputPanel::setDiagnostics(const QStringList& warnings, const QString& context)

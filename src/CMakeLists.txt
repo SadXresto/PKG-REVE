@@ -9,6 +9,8 @@ add_library(pkgstudio_core STATIC
     core/FileSource.cpp
     core/FormatInfo.cpp
     core/FormatUtil.cpp
+    core/BinaryCompare.cpp
+    core/HexBookmarks.cpp
     core/HexDocument.cpp
     core/Logging.cpp
     core/ParserRegistry.cpp
@@ -46,6 +48,7 @@ add_library(pkgstudio_app STATIC
     ui/AiChatPanel.cpp
     ui/ByteInspector.cpp
     ui/CommandPalette.cpp
+    ui/CompareDialog.cpp
     ui/DependencyGraphView.cpp
     ui/DialogCapture.cpp
     ui/EditorArea.cpp
