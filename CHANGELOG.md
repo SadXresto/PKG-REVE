@@ -4,6 +4,42 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.10.0] - 2026-11-22
+
+Apex update: UI polish, the theme collection and the DevFlow productivity engine.
+
+### Added
+
+- **Theme collection**: Cyber Blue, Blood Circuit, Terminal Classic and Arctic Dev,
+  added through the existing JSON theme system. Every built-in theme now carries a
+  description for pickers, and a WCAG contrast helper backs readability tests.
+- **Hex editor polish**: compact identity strip (file, size, offset, selection, view
+  mode), header undo/redo buttons, bookmark and annotation navigation with gutter
+  markers, and a bounded binary comparison dialog with jump-to-offset.
+- **Output console**: text search, timestamp toggle, pause control, copy handling,
+  confirmed clear, source navigation from compiler-style lines, and credential
+  redaction before display.
+- **Settings center**: ten searchable sections (Appearance, Editor, Hex Editor,
+  GameForge, AI Providers, Performance, Keyboard Shortcuts, Plugins, Privacy and
+  Security, Updates), per-setting and per-category reset, restore-defaults
+  confirmation, descriptions, and live theme preview reverted on cancel.
+- **DevFlow**: dashboard, build profile manager with real `cmake`/`meson`/`make`
+  execution (no shell), error intelligence with local explanations and grouped
+  diagnostics, SQLite-backed task board with starter templates, workspace snapshots
+  with crash recovery, evidence-based project health checks, and bounded read-only
+  workflows that generate a Markdown report.
+- **Command center**: settings sections, recent projects and quick actions are now
+  searchable alongside commands, open files, tools and help topics.
+- **Quick actions**: hex, metadata, SHA-256 hash, comparison, bookmark, containing
+  folder, path copy and file properties, offered only when supported.
+
+### Changed
+
+- Database schema v2 adds a `devflow` table for profiles, tasks, snapshots,
+  workflows, error state and activity.
+- Screenshot diagnostics accept `--screenshot-devflow-tab` and
+  `--screenshot-size WIDTHxHEIGHT`.
+
 ## [0.9.1] - 2026-11-22
 
 ### Added

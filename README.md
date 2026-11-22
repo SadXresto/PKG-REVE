@@ -20,10 +20,12 @@ disassembler, a debugger, a plugin runtime and code-signed installers are *not* 
 ## What works today
 
 **Shell and workspace**
-- Activity bar with Explorer, project Search, Recent, GameForge and Help sections, plus a
-  resizable explorer tree backed by `QFileSystemModel`.
+- Activity bar with Explorer, project Search, Recent, GameForge, DevFlow and Help sections,
+  plus a resizable explorer tree backed by `QFileSystemModel`.
 - Editor area with multiple tabs, per-file header strip (`read-only`, format, summary).
-- Bottom output panel with a live log and a diagnostics tab; resizable splitter layout.
+- Bottom output console with a live log: level and text filters, optional timestamps, pause
+  control, copy, confirmed clear, export, jump-to-source on double-click, and credential
+  redaction before anything is displayed.
 - Welcome page with open-file / open-project / new-project / recent actions.
 - Status bar: mode, file, format, cursor offset, selection length, busy indicator, resident
   memory and current theme.
@@ -61,6 +63,33 @@ see [its README](samples/gameforge-demo/README.md).
 
 ![GameForge dependency graph for the bundled NeonDrift demo project](docs/screenshots/gameforge-graph.png)
 
+**DevFlow (development command center)**
+- `Ctrl+Shift+D` opens DevFlow: a dashboard with the current project, activity, saved build
+  profiles, open tasks, tracked errors, snapshots and quick actions.
+- **Build profiles**: name, build system, build folder, configuration, target, compiler,
+  extra arguments and environment entries, saved to SQLite and importable/exportable as JSON.
+  Only CMake, Meson and Makefile are offered, and only when the tool is installed. **Run build**
+  shows the exact command first, executes the tool directly (never a shell), streams real
+  output and can be cancelled. CMake build folders must already be configured.
+- **Error intelligence**: parses GCC/Clang and MSVC diagnostics from build output or the
+  clipboard, groups duplicates, links `file:line`, explains common failures in plain language,
+  suggests possible (never automatic) fixes, and tracks resolved state per project.
+- **Task board**: tasks with priority, To do / In progress / Done, descriptions, project-file
+  and error links, search/filter, stored in SQLite. Starter templates create uncompleted tasks.
+- **Workspace snapshots**: saves open tabs, active tab, sidebar, layout and cursor offsets —
+  never project file contents. Restore reopens existing files and reports missing ones; an
+  autosave snapshot is offered after an unclean exit.
+- **Project health**: structure, build configuration, missing referenced sources, unresolved
+  dependencies, cycles, large files, portability signals and parser limits, each with evidence
+  and a confidence label. No score is invented and a clean run is not called "healthy".
+- **Workflows**: fixed, read-only steps (scan, detect, dependencies, portability, report) with
+  progress, logs and cancellation. The only file written is a Markdown report in the data
+  folder; project scripts and build commands never run automatically.
+- **Quick actions** for the active file: open in hex, analysis, SHA-256, compare, bookmark,
+  containing folder, copy path and properties, shown only when actually supported.
+
+![DevFlow dashboard for the bundled demo project](docs/screenshots/devflow-dashboard-1280x720.png)
+
 **Analysis core**
 - Signature-based parser registry with a raw-bytes fallback and honest warnings for
   unrecognized input.
@@ -95,7 +124,14 @@ see [its README](samples/gameforge-demo/README.md).
 **Hex workspace**
 - Custom-painted hex + ASCII view over a memory-mapped file; only a ~256 KiB window is read
   per repaint, so multi-gigabyte files are usable.
+- Compact information strip above the hex grid: file name, size, cursor offset, selected
+  byte count and HEX/ASCII view mode.
 - Cursor and selection, offset navigation (`Ctrl+G`), copy as hex/ASCII, select all.
+- Header undo/redo buttons and a context menu with copy-offset, bookmark and compare entries.
+- **Bookmarks and annotations** kept in the workspace (never written into the file), with
+  gutter markers, next/previous navigation (`F2`, `Shift+F2`) and a bookmark list.
+- **Binary comparison** against another file on a worker thread: bounded to 64 MiB, reports
+  diff runs, size differences and truncation honestly, and jumps to a differing offset.
 - Streaming search across the whole mapping (`Ctrl+F`) with case-insensitive ASCII mode, run
   on a worker thread with cancellation; results are navigable.
 - **Live byte inspector**: hovering or selecting a byte shows offset, hex, decimal, binary,
@@ -112,9 +148,10 @@ see [its README](samples/gameforge-demo/README.md).
   fields are obvious errors, never guessed values. Templates are explicitly labelled as
   interpretations, not format confirmation. Built-in ELF64/ZIP/PNG examples and a template
   editor with a form for fields plus an advanced JSON view are included.
-- **Smart command center** (`Ctrl+Shift+P`): fuzzy-ranked search across every command (with its
-  current shortcut), open files, the analysis tab, settings-related commands, offline help
-  topics and recently used actions. Arrow keys navigate without leaving the search field.
+- **Universal command center** (`Ctrl+Shift+P`): fuzzy-ranked search across every command (with
+  its current shortcut), open files, recent projects, settings sections, quick actions, the
+  analysis tab, offline help topics and recently used commands. Arrow keys navigate without
+  leaving the search field.
 - **Opt-in byte editing**: click *Editing off* in the file header to start. Type two hex digits
   in the hex column or a printable character in the ASCII column; modified bytes are shown in
   the accent colour.
@@ -129,15 +166,21 @@ see [its README](samples/gameforge-demo/README.md).
 - Same-size editing only: bytes can be replaced, not inserted or deleted, and there is no
   multi-range paste or clip extraction yet.
 
-![Visual structure builder with the ELF64 example template in Void Black](docs/screenshots/structure-voidblack.png)
+![Hex editor with the compact information strip and DevFlow build profiles](docs/screenshots/devflow-builds-1280x720.png)
 
 **Configuration and theming**
 - SQLite-backed settings: theme, editor font family/size, hex bytes per row and grouping,
   lightweight mode, worker-thread cap, cache limit, log level, file logging, session restore,
   recent-list limit.
-- Six built-in themes with **Void Black** as the default: `#0a0a0a` surfaces, `#00ff41` accent,
-  subtle dark-green borders. Dark, Light, Darcula-inspired, Cyberpunk and Neon Hex are also
-  available. All UI surfaces are rendered from one role-based token system into a single QSS.
+- Ten built-in themes with **Void Black** as the default: Dark, Light, Darcula, Cyberpunk,
+  Neon Hex, plus the Apex collection — **Cyber Blue**, **Blood Circuit**, **Terminal Classic**
+  and **Arctic Dev**. Every theme covers editors, tables, trees, tabs, buttons, menus, dialogs,
+  tooltips, graph, scrollbars, console and settings, and carries a description shown in the
+  picker. All UI surfaces are rendered from one role-based token system into a single QSS, and
+  readability is checked by contrast tests.
+- Searchable settings center with ten sections, per-setting and per-category reset, restore
+  defaults (confirmed), and a live theme preview that is reverted on cancel. The chosen theme
+  is stored in SQLite and restored on the next start.
 - JetBrains Mono / Fira Code (or the next installed fixed-pitch font) is resolved automatically
   for the hex and editor fonts; the size stays user-configurable.
 - Theme editor with live colour editing, user themes stored as JSON, theme import/export.
@@ -145,8 +188,8 @@ see [its README](samples/gameforge-demo/README.md).
 - Lightweight mode disables optional UI animation/fade effects.
 
 **Data and stability**
-- SQLite schema v1: settings, recent entries, session state, analysis cache keyed by path,
-  size and mtime.
+- SQLite schema v2: settings, recent entries, session state, analysis cache keyed by path,
+  size and mtime, and DevFlow documents (profiles, tasks, snapshots, workflows, error state).
 - `Result<T>`/`Status` error model for expected failures; parser exceptions are contained by
   the registry and surfaced as errors.
 - Overflow-safe offset arithmetic, file-size validation before reads, bounded table parsing,
@@ -154,7 +197,7 @@ see [its README](samples/gameforge-demo/README.md).
 
 ## Demo build and packaging
 
-This version is a **development demo build** (`0.6.0`): it is not code-signed, and
+This version is a **development demo build** (`0.10.0`): it is not code-signed, and
 **Help → Feature status** inside the application lists what is implemented, partial or
 experimental, and planned. The first screen includes synthetic ELF/APK samples and a sample
 project, works without the source tree, and **F1** opens the About screen with the version,
