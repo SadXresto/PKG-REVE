@@ -43,3 +43,9 @@ dist/
 artifacts/
 .portable-home/
 dist-win/
+
+# Release assets are committed on purpose: tools/publish-release.ps1 verifies
+# their checksums and uploads them to the GitHub release. Keep them small.
+!releases/
+!releases/*.exe
+!releases/*.zip

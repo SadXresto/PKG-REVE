@@ -1,0 +1,2 @@
+a4f55ce88d123a2bf775a3551493434def1d6c8c1dca66cba351f4027631a7ea  PKGStudio-0.7.4-Setup-x64.exe
+d14d82a89c409e7f07bd404449b6a83b8cc5234bcdf4afc7d14ba9aa24858a48  PKGStudio-0.7.4-win64.zip
