@@ -16,7 +16,10 @@ add_library(pkgstudio_core STATIC
     core/Signature.cpp
     core/SignatureScanner.cpp
     core/Structure.cpp
+    core/gameforge/BuildConfig.cpp
+    core/gameforge/DependencyGraph.cpp
     core/gameforge/GameProject.cpp
+    core/gameforge/PortingIntelligence.cpp
     core/parsers/ElfParser.cpp
     core/parsers/ParserSupport.cpp
     core/parsers/PeParser.cpp
@@ -43,6 +46,7 @@ add_library(pkgstudio_app STATIC
     ui/AiChatPanel.cpp
     ui/ByteInspector.cpp
     ui/CommandPalette.cpp
+    ui/DependencyGraphView.cpp
     ui/DialogCapture.cpp
     ui/EditorArea.cpp
     ui/FileEditor.cpp

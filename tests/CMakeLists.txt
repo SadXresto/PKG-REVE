@@ -35,6 +35,7 @@ add_executable(pkgstudio_tests
     test_data.cpp
     test_fuzz.cpp
     test_gameforge.cpp
+    test_gameforge_config.cpp
     test_performance.cpp
 )
 

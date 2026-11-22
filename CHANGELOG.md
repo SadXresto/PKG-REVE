@@ -4,6 +4,34 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.9.0] - 2026-11-22
+
+### Added
+
+- **GameForge build-configuration inspector**: parses CMake (`CMakeLists.txt`,
+  `*.cmake`), Meson, Makefiles, `project.godot` and Unreal `*.uproject` files into
+  targets, dependencies with versions, compiler settings, architecture flags and
+  platform conditions. Every finding keeps its `file:line` and the source line it
+  came from, and double-clicking a row opens that file.
+- **Dependency graph**: a layered, theme-aware canvas with zoom, pan, node search,
+  selection and a details panel. Edges stated in a build file are solid; the project
+  root and link-only dependencies are drawn dashed. Cycles are reported as paths,
+  link entries that are never declared are listed as unresolved, and node/edge counts
+  are capped with an explicit "limited" note.
+- **Porting intelligence tab**: Windows, Linux/POSIX, architecture, graphics/input and
+  external-dependency sections assembled only from parsed build files and the existing
+  API scan, plus build-configuration recommendations that cite their evidence and
+  state when nothing was found.
+- Graph/config/intelligence refresh automatically after a project scan, on a worker
+  thread with cancellation; a generation counter discards results from an older
+  project.
+
+### Changed
+
+- GameForge's single "Analyze portability" action is now **Re-analyze**: one background
+  pass refreshes the build config, graph, API scan and porting intelligence together.
+- Version 0.9.0.
+
 ## [0.8.0] - 2026-11-22
 
 ### Added

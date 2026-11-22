@@ -41,6 +41,18 @@ disassembler, a debugger, a plugin runtime and code-signed installers are *not* 
   FMOD/Wwise, pthread, std::thread) with match counts and a `file:line` example. The report
   states its own limits: it is textual evidence for a port, not an automatic port, a build
   result or a verdict.
+- **Build configuration inspector**: parses CMake, Meson, Makefiles, `project.godot` and
+  Unreal `*.uproject` files into targets, versions, compiler settings, architecture flags
+  and platform conditions. Every row keeps the source `file:line` and opens it on
+  double-click; unparsable files become warnings instead of guesses.
+- **Dependency graph**: zoomable, pannable layered canvas with node search, selection and a
+  details panel. Solid edges are stated in a build file, dashed edges are inferred (the
+  project root, link names without a declaration). Target cycles are reported as paths and
+  undeclared link names are listed as unresolved; node and edge limits are shown, never
+  silently applied.
+- **Porting intelligence**: Windows, Linux/POSIX, architecture, graphics/input and external
+  dependency sections with recommendations derived only from the parsed build files and the
+  API scan, each citing its evidence; absent evidence is reported as absent.
 
 **Analysis core**
 - Signature-based parser registry with a raw-bytes fallback and honest warnings for
