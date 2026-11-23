@@ -11,6 +11,7 @@
 #include "ui/FileEditor.h"
 #include "ui/HelpDialog.h"
 #include "ui/MainWindow.h"
+#include "ui/OnboardingDialog.h"
 
 #include <QApplication>
 #include <QDialog>
@@ -161,6 +162,12 @@ int Application::run(const StartupOptions& options)
         // would confuse a demo or a screenshot run.
         m_window->restoreSession();
     }
+    // The guided tour is for a real first launch only: never a screenshot or
+    // self-test run, which must not block on a modal dialog.
+    if (!hasStartupContent && options.screenshotPath.isEmpty() && !options.selfTest
+        && m_database.setting(QStringLiteral("ui.onboarded")) != QLatin1String("true")) {
+        m_window->showOnboarding();
+    }
 
     if (!options.screenshotDialog.isEmpty()) {
         if (options.screenshotPath.isEmpty()) {
@@ -180,6 +187,11 @@ int Application::run(const StartupOptions& options)
             helpDialog.reset(
                 ui::HelpDialog::createTopicDialog(m_window, QStringLiteral("help.featureStatus")));
             dialog = helpDialog.get();
+        } else if (options.screenshotDialog == QLatin1String("onboarding")) {
+            aiDialog = std::make_unique<ui::OnboardingDialog>(
+                QApplication::applicationVersion(), m_window);
+            aiDialog->setObjectName(QStringLiteral("onboardingDialog"));
+            dialog = aiDialog.get();
         } else if (options.screenshotDialog == QLatin1String("ai")) {
             // The chat is a dock in the main window; wrap it for a standalone
             // capture so the dialog screenshot mode still documents it.
@@ -230,6 +242,16 @@ int Application::run(const StartupOptions& options)
             m_window->showCodeTabForCurrentEditor();
         else if (options.screenshotTab == QLatin1String("chat"))
             m_window->showAiAssistant();
+        else if (options.screenshotTab == QLatin1String("navigator")) {
+            m_window->showProjectNavigator();
+            m_window->setSidebarWidth(640);
+        } else if (options.screenshotTab == QLatin1String("tests")) {
+            m_window->showTestCenter();
+            m_window->setSidebarWidth(640);
+        } else if (options.screenshotTab == QLatin1String("plugins")) {
+            m_window->showPluginStudio();
+            m_window->setSidebarWidth(640);
+        }
         else if (options.screenshotTab == QLatin1String("devflow")) {
             const QString tab = options.screenshotDevFlowTab.isEmpty()
                                     ? QStringLiteral("dashboard")
@@ -302,6 +324,50 @@ int Application::run(const StartupOptions& options)
             poll->start();
             return m_app.exec();
         }
+        // The Navigator and Test Center scan/detect on worker threads, so wait
+        // for the real result instead of guessing a delay.
+        if (options.screenshotTab == QLatin1String("navigator")
+            || options.screenshotTab == QLatin1String("tests")) {
+            const bool navigator = options.screenshotTab == QLatin1String("navigator");
+            const QString tabName = options.screenshotTab;
+            auto* poll = new QTimer(this);
+            auto waited = std::make_shared<int>(0);
+            poll->setInterval(200);
+            connect(poll, &QTimer::timeout, this,
+                    [this, poll, waited, path, navigator, tabName]() {
+                *waited += poll->interval();
+                const bool ready = navigator ? m_window->projectNavigatorReady()
+                                             : m_window->testCenterReady();
+                if (ready && *waited >= 700) {
+                    poll->stop();
+                    QTimer::singleShot(250, this, [this, path]() {
+                        const QPixmap shot = m_window->grab();
+                        const bool saved = shot.save(path);
+                        if (saved) {
+                            logInfo(QString::fromLatin1(kLogCategory),
+                                    QStringLiteral("Screenshot saved: %1").arg(path));
+                            QTextStream(stdout) << QStringLiteral("screenshot: %1 (%2x%3)\n")
+                                                       .arg(path)
+                                                       .arg(shot.width())
+                                                       .arg(shot.height());
+                        } else {
+                            logError(QString::fromLatin1(kLogCategory),
+                                     QStringLiteral("Cannot save screenshot: %1").arg(path));
+                        }
+                        QCoreApplication::exit(saved ? 0 : 2);
+                    });
+                } else if (*waited >= 30000) {
+                    poll->stop();
+                    QTextStream(stderr) << QStringLiteral("The %1 workspace did not finish "
+                                                          "scanning within 30 s\n")
+                                               .arg(tabName);
+                    QCoreApplication::exit(2);
+                }
+            });
+            poll->start();
+            return m_app.exec();
+        }
+
         QTimer::singleShot(1500, this, [this, path]() {
             const QPixmap shot = m_window->grab();
             const bool saved = shot.save(path);

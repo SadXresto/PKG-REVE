@@ -413,4 +413,23 @@ QVector<ListingEntry> extractEdits(const QString& reply)
     return entries;
 }
 
+FileProposal extractFileProposal(const QString& reply)
+{
+    static const QRegularExpression fence(
+        QStringLiteral("```(?:pkgstudio-file|file)\\s*\\n(.*?)```"),
+        QRegularExpression::DotMatchesEverythingOption
+            | QRegularExpression::CaseInsensitiveOption);
+    FileProposal proposal;
+    const auto match = fence.match(reply);
+    if (!match.hasMatch()) {
+        proposal.note = QStringLiteral("The reply did not contain a ```pkgstudio-file block.");
+        return proposal;
+    }
+    proposal.found = true;
+    proposal.bytes = match.captured(1).toUtf8();
+    if (proposal.bytes.isEmpty())
+        proposal.note = QStringLiteral("The proposed file block is empty.");
+    return proposal;
+}
+
 }  // namespace pkg

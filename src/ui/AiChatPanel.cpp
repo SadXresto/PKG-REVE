@@ -6,9 +6,11 @@
 #include "data/Database.h"
 #include "data/Settings.h"
 #include "ui/FileEditor.h"
+#include "ui/PatchReviewDialog.h"
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialog>
 #include <QEvent>
 #include <QFutureWatcher>
 #include <QHBoxLayout>
@@ -151,6 +153,25 @@ void AiChatPanel::buildUi()
     m_chat->setObjectName(QStringLiteral("aiTranscript"));
     m_chat->setOpenExternalLinks(false);
     layout->addWidget(m_chat, 1);
+
+    auto* aiActionRow = new QHBoxLayout();
+    aiActionRow->setContentsMargins(0, 0, 0, 0);
+    aiActionRow->setSpacing(6);
+    auto* actionCaption = new QLabel(QStringLiteral("Action"), this);
+    aiActionRow->addWidget(actionCaption);
+    m_action = new QComboBox(this);
+    m_action->setObjectName(QStringLiteral("aiActionCombo"));
+    m_action->addItem(QStringLiteral("Ask about this file"), QStringLiteral("ask"));
+    m_action->addItem(QStringLiteral("Explain selected bytes"), QStringLiteral("selection"));
+    m_action->addItem(QStringLiteral("Explain last build error"), QStringLiteral("error"));
+    m_action->addItem(QStringLiteral("Suggest a refactoring"), QStringLiteral("refactor"));
+    m_action->addItem(QStringLiteral("Generate documentation"), QStringLiteral("docs"));
+    m_action->addItem(QStringLiteral("Propose a patch (reviewed before apply)"),
+                      QStringLiteral("patch"));
+    m_action->setToolTip(QStringLiteral("The action shapes the prompt. Nothing is applied "
+                                        "without a separate review and approval."));
+    aiActionRow->addWidget(m_action, 1);
+    layout->addLayout(aiActionRow);
 
     m_input = new QPlainTextEdit(this);
     m_input->setPlaceholderText(
@@ -387,11 +408,47 @@ void AiChatPanel::setBusy(bool busy, const QString& message)
     m_status->setText(message);
 }
 
+void AiChatPanel::setBuildErrorProvider(BuildErrorProvider provider)
+{
+    m_buildErrorProvider = std::move(provider);
+}
+
+void AiChatPanel::explainLastBuildError()
+{
+    if (m_action == nullptr)
+        return;
+    const int index = m_action->findData(QStringLiteral("error"));
+    if (index >= 0)
+        m_action->setCurrentIndex(index);
+    if (m_buildErrorProvider == nullptr || m_buildErrorProvider().trimmed().isEmpty()) {
+        m_status->setText(QStringLiteral("No build output is available yet. Run a build in "
+                                         "DevFlow first."));
+        return;
+    }
+    m_input->setFocus(Qt::ShortcutFocusReason);
+    m_status->setText(QStringLiteral("Press Send to explain the last build output."));
+}
+
 void AiChatPanel::sendPrompt()
 {
-    const QString prompt = m_input->toPlainText().trimmed();
-    if (prompt.isEmpty())
-        return;
+    const QString actionId = m_action != nullptr
+        ? m_action->currentData().toString()
+        : QStringLiteral("ask");
+    QString prompt = m_input->toPlainText().trimmed();
+    if (prompt.isEmpty()) {
+        if (actionId == QLatin1String("selection"))
+            prompt = QStringLiteral("Explain the selected bytes.");
+        else if (actionId == QLatin1String("error"))
+            prompt = QStringLiteral("Explain this build error and name one concrete next step.");
+        else if (actionId == QLatin1String("refactor"))
+            prompt = QStringLiteral("Suggest a refactoring for the code in context.");
+        else if (actionId == QLatin1String("docs"))
+            prompt = QStringLiteral("Generate concise documentation for this file.");
+        else if (actionId == QLatin1String("patch"))
+            prompt = QStringLiteral("Propose a complete replacement for this file.");
+        else
+            return;
+    }
 
     const AiSettingsValues values = currentValues();
     if (AiSettingsStore::chatCompletionsUrl(values.endpoint).isEmpty()
@@ -405,14 +462,94 @@ void AiChatPanel::sendPrompt()
     }
     saveSettings();
 
-    QString outgoing = prompt;
     FileEditor* openEditor = editor();
     const QString targetPath = openEditor != nullptr ? openEditor->path() : QString();
-    if (values.includeFileContext && openEditor != nullptr) {
-        const QString context = fileContext(openEditor);
-        if (!context.isEmpty())
-            outgoing = context + QStringLiteral("\n\nRequest: ") + prompt;
+    QString context;
+    if (actionId == QLatin1String("error")) {
+        const QString output = m_buildErrorProvider != nullptr ? m_buildErrorProvider()
+                                                              : QString();
+        if (output.trimmed().isEmpty()) {
+            m_status->setText(QStringLiteral("No build output is available yet. Run a build in "
+                                             "DevFlow first."));
+            return;
+        }
+        context = QStringLiteral("Build output (bounded):\n%1")
+                      .arg(output.right(8000));
+    } else if (actionId == QLatin1String("selection")) {
+        if (openEditor == nullptr || !openEditor->hasSelection()) {
+            m_status->setText(QStringLiteral("Select bytes in the hex view first, then run "
+                                             "Explain selected bytes."));
+            return;
+        }
+        context = QStringLiteral("Selection in %1:\n%2")
+                      .arg(targetPath, openEditor->selectionContext(4096));
+    } else if (actionId == QLatin1String("patch")) {
+        if (openEditor == nullptr) {
+            m_status->setText(QStringLiteral("Open the file to patch first."));
+            return;
+        }
+        constexpr quint64 kPatchLimit = 256ULL * 1024ULL;
+        if (openEditor->fileSize() > kPatchLimit) {
+            m_status->setText(QStringLiteral("Patch proposals are limited to files up to "
+                                             "256 KiB in this build."));
+            return;
+        }
+        context = fileContext(openEditor);
+    } else if (values.includeFileContext && openEditor != nullptr) {
+        context = fileContext(openEditor);
     }
+
+    // A remote endpoint must never receive project content silently.
+    if (!context.isEmpty() && !AiSettingsStore::isLoopbackEndpoint(values.endpoint)
+        && !m_remoteContextAccepted) {
+        const QUrl url(values.endpoint);
+        const QString host = url.host().isEmpty() ? values.endpoint : url.host();
+        const auto answer = QMessageBox::question(
+            this, QStringLiteral("Send project content to %1?").arg(host),
+            QStringLiteral("This request includes project content (a file listing, selection or "
+                           "build output). It will be sent to %1 for this session. PKG Studio "
+                           "has no relay and no telemetry.\n\nContinue?")
+                .arg(host),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (answer != QMessageBox::Yes) {
+            m_status->setText(QStringLiteral("Request cancelled; nothing was sent."));
+            return;
+        }
+        m_remoteContextAccepted = true;
+    }
+
+    QString instruction;
+    if (actionId == QLatin1String("selection"))
+        instruction = QStringLiteral("Explain what the selected bytes are and how they are "
+                                     "used. Base the answer only on the listing; say so when "
+                                     "the bytes are not enough to identify a format.");
+    else if (actionId == QLatin1String("error"))
+        instruction = QStringLiteral("Explain this build diagnostic in plain language, name the "
+                                     "likely cause from the evidence in the output, and give "
+                                     "one concrete next step. Do not claim anything was fixed.");
+    else if (actionId == QLatin1String("refactor"))
+        instruction = QStringLiteral("Suggest a refactoring for the code in context. Describe "
+                                     "the change and its trade-offs; do not claim it was "
+                                     "applied. Byte-level edits may be returned in a "
+                                     "```pkgstudio-edit block for review.");
+    else if (actionId == QLatin1String("docs"))
+        instruction = QStringLiteral("Write concise documentation for this file: purpose, "
+                                     "structure, notable fields and limits. Do not invent facts "
+                                     "the listing does not show.");
+    else if (actionId == QLatin1String("patch"))
+        instruction = QStringLiteral("Return the complete replacement file inside one "
+                                     "```pkgstudio-file fenced block, with no commentary "
+                                     "inside the block. This is a proposal only: the user "
+                                     "reviews a diff and approves it before anything is "
+                                     "applied. Do not change more than the request needs.");
+    else
+        instruction = QStringLiteral("Answer using the evidence in the context. Do not invent "
+                                     "file contents.");
+
+    QString outgoing = prompt;
+    if (!context.isEmpty())
+        outgoing = context + QStringLiteral("\n\nRequest: ") + prompt;
+    outgoing += QStringLiteral("\n\n") + instruction;
 
     appendMessage(QStringLiteral("You"), prompt);
     m_input->clear();
@@ -423,7 +560,7 @@ void AiChatPanel::sendPrompt()
 
     setBusy(true, QStringLiteral("Waiting for %1\u2026").arg(values.endpoint));
     m_client->send(values, m_key->text(), m_history,
-                   [this, targetPath](const Result<AiClient::Reply>& reply) {
+                   [this, targetPath, actionId](const Result<AiClient::Reply>& reply) {
                        setBusy(false, QString());
                        if (!reply) {
                            const QString detail = reply.error().detail;
@@ -451,6 +588,20 @@ void AiChatPanel::sendPrompt()
                        while (m_history.size() > 24)
                            m_history.remove(0);
 
+                       if (actionId == QLatin1String("patch")) {
+                           const FileProposal proposal =
+                               extractFileProposal(reply.value().content);
+                           if (!proposal.found) {
+                               m_status->setText(proposal.note.isEmpty()
+                                                     ? QStringLiteral("No proposal block in "
+                                                                      "this reply")
+                                                     : proposal.note);
+                               return;
+                           }
+                           reviewProposedFile(proposal.bytes, targetPath);
+                           return;
+                       }
+
                        const QVector<ListingEntry> edits = extractEdits(reply.value().content);
                        if (edits.isEmpty()) {
                            m_status->setText(QStringLiteral("No byte edits in this reply"));
@@ -475,6 +626,45 @@ void AiChatPanel::sendPrompt()
                                " \u2014 switch back to the file this reply was about");
                        m_status->setText(status);
                    });
+}
+
+void AiChatPanel::reviewProposedFile(const QByteArray& proposal, const QString& targetPath)
+{
+    FileEditor* openEditor = editor();
+    if (openEditor == nullptr || targetPath.isEmpty() || openEditor->path() != targetPath) {
+        m_status->setText(QStringLiteral("The proposal belongs to %1. Open that file again "
+                                         "to review it.")
+                              .arg(targetPath));
+        return;
+    }
+    auto before = openEditor->document()->readMerged(0, openEditor->document()->size());
+    if (!before) {
+        m_status->setText(QStringLiteral("Cannot read the current file for review: %1")
+                              .arg(before.error().detail.isEmpty() ? before.error().message
+                                                                   : before.error().detail));
+        return;
+    }
+    PatchReviewDialog review(targetPath, before.value(), proposal, this);
+    if (review.exec() != QDialog::Accepted || !review.approved()) {
+        m_status->setText(QStringLiteral("Proposal discarded; the file was not changed."));
+        appendMessage(QStringLiteral("PKG Studio"),
+                      QStringLiteral("The proposed patch was not applied."));
+        return;
+    }
+    QVector<ListingEntry> entries;
+    entries.append(ListingEntry{0, proposal});
+    const auto applied = openEditor->applyByteEdits(entries);
+    if (!applied) {
+        m_status->setText(applied.error().detail.isEmpty() ? applied.error().message
+                                                          : applied.error().detail);
+        return;
+    }
+    m_status->setText(QStringLiteral("Approved patch applied: %1 byte(s) changed in memory "
+                                     "\u2014 undo with Ctrl+Z or save to write them")
+                          .arg(applied.value()));
+    appendMessage(QStringLiteral("PKG Studio"),
+                  QStringLiteral("The reviewed patch was applied after approval. The changes "
+                                 "stay in memory and are undoable until you save."));
 }
 
 void AiChatPanel::applyPendingEdits()

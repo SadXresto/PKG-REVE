@@ -109,4 +109,15 @@ private:
 /// bare "OFFSET  HEX BYTES" lines when no fence is present.
 [[nodiscard]] QVector<ListingEntry> extractEdits(const QString& reply);
 
+/// A complete replacement file proposed by the model.
+struct FileProposal {
+    bool found = false;
+    QByteArray bytes;
+    QString note;
+};
+
+/// Extracts a fenced ```pkgstudio-file block as the proposed complete content of
+/// the file. Nothing is applied here; the caller reviews it first.
+[[nodiscard]] FileProposal extractFileProposal(const QString& reply);
+
 }  // namespace pkg

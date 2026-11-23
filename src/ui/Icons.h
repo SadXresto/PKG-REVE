@@ -16,6 +16,9 @@ enum class IconKind {
     Diagnostics,
     GameForge,
     DevFlow,
+    Navigator,
+    Tests,
+    Plugins,
     Close,
 };
 

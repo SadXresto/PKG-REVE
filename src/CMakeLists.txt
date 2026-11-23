@@ -14,6 +14,7 @@ add_library(pkgstudio_core STATIC
     core/HexDocument.cpp
     core/Logging.cpp
     core/ParserRegistry.cpp
+    core/ProjectDiff.cpp
     core/ProcessInfo.cpp
     core/Signature.cpp
     core/SignatureScanner.cpp
@@ -22,6 +23,8 @@ add_library(pkgstudio_core STATIC
     core/gameforge/DependencyGraph.cpp
     core/gameforge/GameProject.cpp
     core/gameforge/PortingIntelligence.cpp
+    core/plugins/PluginManifest.cpp
+    core/projectnav/ProjectNavigator.cpp
     core/parsers/ElfParser.cpp
     core/parsers/ParserSupport.cpp
     core/parsers/PeParser.cpp
@@ -46,6 +49,7 @@ add_library(pkgstudio_app STATIC
     devflow/DevFlowStore.cpp
     devflow/ErrorIntelligence.cpp
     devflow/ProjectHealth.cpp
+    devflow/TestCenter.cpp
     devflow/WorkflowRunner.cpp
     data/Theme.cpp
     data/ThemeManager.cpp
@@ -66,13 +70,19 @@ add_library(pkgstudio_app STATIC
     ui/HexView.cpp
     ui/Icons.cpp
     ui/MainWindow.cpp
+    ui/OnboardingDialog.cpp
     ui/OutputPanel.cpp
     ui/PackageInfoView.cpp
+    ui/PatchReviewDialog.cpp
+    ui/PluginStudioPanel.cpp
+    ui/ProjectDiffDialog.cpp
+    ui/ProjectNavigatorPanel.cpp
     ui/RecentPanel.cpp
     ui/SearchPanel.cpp
     ui/SettingsDialog.cpp
     ui/StructureFormEditor.cpp
     ui/StructurePanel.cpp
+    ui/TestCenterPanel.cpp
     ui/ThemeEditorDialog.cpp
     ui/WelcomePage.cpp
 )

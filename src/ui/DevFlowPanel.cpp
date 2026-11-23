@@ -198,6 +198,11 @@ bool DevFlowPanel::isBuildRunning() const
     return m_buildRunner->isRunning();
 }
 
+QString DevFlowPanel::lastBuildOutput() const
+{
+    return m_buildOutput != nullptr ? m_buildOutput->toPlainText() : QString();
+}
+
 bool DevFlowPanel::isWorkflowRunning() const
 {
     return m_workflowRunner->isRunning();
@@ -825,7 +830,9 @@ void DevFlowPanel::onBuildFinished(int exitCode, QProcess::ExitStatus status,
     addActivity(success ? QStringLiteral("Build succeeded")
                         : QStringLiteral("Build failed (exit code %1)").arg(exitCode));
 
-    analyzeText(m_buildOutput->toPlainText(), QStringLiteral("build output"));
+    const QString output = m_buildOutput->toPlainText();
+    analyzeText(output, QStringLiteral("build output"));
+    emit buildFinished(output, success);
     if (m_errorGroups.size() > 0)
         m_tabs->setCurrentIndex(2);
 }

@@ -38,8 +38,11 @@ class FileEditor;
 class FileExplorer;
 class GameForgePanel;
 class OutputPanel;
+class PluginStudioPanel;
+class ProjectNavigatorPanel;
 class RecentPanel;
 class SearchPanel;
+class TestCenterPanel;
 class WelcomePage;
 
 class MainWindow : public QMainWindow {
@@ -81,6 +84,17 @@ public:
     void showQuickActions();
     void showThemeEditor();
     void showAiAssistant();
+    /// Workspace helpers for the command center, menus and screenshots. Each
+    /// returns the workspace title.
+    QString showProjectNavigator();
+    QString showTestCenter();
+    QString showPluginStudio();
+    [[nodiscard]] bool projectNavigatorReady() const;
+    [[nodiscard]] bool testCenterReady() const;
+    void showProjectDiff();
+    void showOnboarding();
+    void showContextHelp();
+    void explainBuildErrorWithAi();
     void chooseThemeBackground();
     void clearThemeBackground();
 
@@ -167,6 +181,10 @@ private:
     RecentPanel* m_recentPanel = nullptr;
     GameForgePanel* m_gameForge = nullptr;
     DevFlowPanel* m_devFlow = nullptr;
+    ProjectNavigatorPanel* m_navigator = nullptr;
+    TestCenterPanel* m_testCenter = nullptr;
+    PluginStudioPanel* m_pluginStudio = nullptr;
+    QString m_activeWorkspace = QStringLiteral("explorer");
 
     QSplitter* m_mainSplitter = nullptr;
     QSplitter* m_verticalSplitter = nullptr;

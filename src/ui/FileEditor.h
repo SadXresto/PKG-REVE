@@ -92,6 +92,11 @@ public:
     /// Human-readable listing of the file (or its first `maxBytes`), used by the
     /// Code tab and as bounded context for the AI assistant.
     [[nodiscard]] QString readableListing(quint64 maxBytes) const;
+    /// True when more than one byte is selected in the hex view.
+    [[nodiscard]] bool hasSelection() const;
+    /// Offset/hex/ASCII listing of the current selection, bounded so a huge
+    /// selection cannot flood a prompt. Empty when nothing is selected.
+    [[nodiscard]] QString selectionContext(quint64 maxBytes) const;
     /// Applies parsed listing runs as undoable in-memory edits. Enables editing
     /// for this file first, because the change must stay reviewable.
     [[nodiscard]] Result<int> applyByteEdits(const QVector<pkg::ListingEntry>& entries);

@@ -34,12 +34,20 @@ class AiChatPanel : public QWidget {
 
 public:
     using EditorProvider = std::function<FileEditor*()>;
+    /// Supplies the most recent build output for the "explain build error"
+    /// action. Empty when no build has run.
+    using BuildErrorProvider = std::function<QString()>;
 
     AiChatPanel(Database& database, EditorProvider editorProvider, QWidget* parent = nullptr);
 
     void focusInput();
     /// Updates the "context:" line after the active editor changes.
     void refreshContext();
+    /// Connects the build output used by the error-explanation action.
+    void setBuildErrorProvider(BuildErrorProvider provider);
+    /// Selects the build-error action and shows the panel (used by the command
+    /// center and the DevFlow errors tab).
+    void explainLastBuildError();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -54,6 +62,7 @@ private:
     void applyLocalScan(const LocalModelScan& scan);
     void updatePrivacyHint();
     void sendPrompt();
+    void reviewProposedFile(const QByteArray& proposal, const QString& targetPath);
     void applyPendingEdits();
     void appendMessage(const QString& who, const QString& text, bool isError = false);
     void setBusy(bool busy, const QString& message);
@@ -80,15 +89,18 @@ private:
     QLabel* m_privacy = nullptr;
     QTextBrowser* m_chat = nullptr;
     QPlainTextEdit* m_input = nullptr;
+    QComboBox* m_action = nullptr;
     QLabel* m_status = nullptr;
     QPushButton* m_sendButton = nullptr;
     QPushButton* m_applyButton = nullptr;
 
+    BuildErrorProvider m_buildErrorProvider;
     QVector<AiMessage> m_history;
     QVector<ListingEntry> m_pendingEdits;
     QString m_pendingEditsPath;
     bool m_busy = false;
     bool m_scanning = false;
+    bool m_remoteContextAccepted = false;
 };
 
 }  // namespace pkg::ui

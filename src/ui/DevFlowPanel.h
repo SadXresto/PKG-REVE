@@ -69,6 +69,9 @@ public:
     [[nodiscard]] bool isHealthRunning() const;
     /// Starts a health check; returns false when one is already running.
     bool runHealthCheck();
+    /// The raw output of the most recent build, for error explanation and the
+    /// project index. Empty before a build runs.
+    [[nodiscard]] QString lastBuildOutput() const;
     /// Creates and persists a task through the task dialog (used by tests and
     /// the command center). Returns the task id, or empty when cancelled.
     QString createTaskInteractive();
@@ -76,6 +79,8 @@ public:
 signals:
     void statusMessage(const QString& message);
     void taskCountChanged(int openTasks);
+    /// Emitted after a build finishes, with its complete output.
+    void buildFinished(const QString& output, bool success);
 
 private:
     struct HealthResult {

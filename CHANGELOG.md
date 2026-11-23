@@ -4,6 +4,69 @@ All notable changes to PKG Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use semantic
 versioning once a public release exists.
 
+## [0.11.0] - 2026-11-23
+
+Orbit update: project intelligence and developer automation.
+
+### Added
+
+- **Project Navigator**: a read-only index over files, build targets, dependencies,
+  configuration files, portability source references, portability findings and build errors.
+  Search and kind filtering, per-entity evidence and relationships, ambient highlighting of
+  confirm/infer/weak confidence, and open-file navigation. Rebuilt when a project opens and
+  when a DevFlow build finishes; bounded at 2000 files, 4000 entities, 8000 relationships and
+  400 errors with explicit truncation notes.
+- **AI code actions**: explain selected bytes, explain the last build error, suggest a
+  refactoring, generate documentation and propose a complete file. Patch proposals open a
+  before/after diff review and apply only after explicit approval; a size-changing proposal
+  can be saved but not applied in place. Remote endpoints ask once per session before project
+  content is sent.
+- **Test & Debug Center**: detection for CTest/CMake registration, GoogleTest, Catch2, pytest,
+  npm test and Cargo.toml; only detected frameworks are offered. Real `QProcess` runs without
+  a shell, streamed output, cancellation, parsed pass/fail/skip counts, failure grouping by a
+  normalised fingerprint, source navigation, the last 60 runs in SQLite, regression comparison
+  and Markdown report export. Unrecognised output is shown raw with no invented results.
+- **Smart project diff**: compares two folder states without writing to either. Added,
+  removed, modified and unchanged files (bounded SHA-256 sampling), configuration edits with
+  isolated lines, dependency version changes, bounded binary differences with the first
+  differing offset, and portability occurrence deltas. Markdown export.
+- **Extension Studio**: plugin manifest editor for API version 1 with permission audit,
+  validation (id, semantic version, API version, relative entry that exists and parses,
+  known permissions, installed dependency versions), a ready example plugin, the SDK README
+  and checksummed bundle export. Plugin code is never executed.
+- **Onboarding**: three-step first-launch guide with sample-project and getting-started
+  actions, stored through `ui.onboarded`. Empty states with a next action in the Navigator,
+  Test Center and Extension Studio; contextual help (`F1`) for the active workspace.
+- Help topics for the Navigator, Test Center, smart diff, plugin SDK and DevFlow; new commands
+  in the command center and menus.
+- Diagnostic captures: `--screenshot-tab navigator|tests|plugins` and
+  `--screenshot-dialog onboarding`.
+- `docs/ORBIT.md` and `docs/PLUGIN-SDK.md`.
+
+### Changed
+
+- Version 0.11.0.
+- The Activity bar, View menu and Tools menu expose the new workspaces; `Ctrl+Shift+N` opens
+  the Navigator, `Ctrl+Shift+T` the Test Center and `F1` the workspace help.
+- DevFlow emits its completed build output so the Navigator index and AI error action use the
+  same diagnostics.
+
+### Tests
+
+- 180 tests pass, including new coverage for the project index (relationships, confidence,
+  cancellation, limits), project diff (files, configuration, dependencies, portability,
+  cancellation, invalid folders), plugin validation and packaging, test detection and output
+  parsing, failure grouping and regression comparison, real test-process execution and
+  cancellation, AI file-proposal extraction, and the patch diff.
+
+### Known limitations
+
+- Patch proposals cannot change the file size.
+- Plugins are declarative only; there is no runtime, sandbox or permission grant.
+- GoogleTest and Catch2 run through CTest and need a configured build folder.
+- Project diff hashes at most 4 MiB per file and labels sampled matches.
+- No Windows build was executed in this environment.
+
 ## [0.10.0] - 2026-11-22
 
 Apex update: UI polish, the theme collection and the DevFlow productivity engine.

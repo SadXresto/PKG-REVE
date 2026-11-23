@@ -11,6 +11,7 @@ aqtinstall.log
 
 # Test/runtime state
 .testdata/
+.demo-data-*/
 *.db
 *.db-journal
 *.db-wal

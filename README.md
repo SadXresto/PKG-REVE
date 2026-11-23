@@ -7,21 +7,24 @@ runtime.
 
 ![PKG Studio with the dark theme](docs/screenshots/theme-dark.png)
 
-**Version 0.7.0 (development build).** This repository contains a real, running application: the
-VS Code-style shell with the Void Black design system, the SQLite data layer, the format
-analysis core with signature confidence, and a hex workspace with a live byte inspector,
-signature overlay, same-length replace, opt-in editing, undo/redo and backup-on-save. It also
-has readable byte listings that assemble back into the file, image themes, and an optional AI
-assistant that talks to a local OpenAI-compatible endpoint and proposes byte edits. A CPU
-disassembler, a debugger, a plugin runtime and code-signed installers are *not* present; see
-[docs/ROADMAP.md](docs/ROADMAP.md) for the honest status of every phase, and
-[docs/CODE-LISTING.md](docs/CODE-LISTING.md) for what the Code tab does and does not do.
+**Version 0.11.0 "Orbit" (development build).** This repository contains a real, running
+application: the VS Code-style shell with the Void Black design system, the SQLite data layer,
+the format analysis core with signature confidence, and a hex workspace with a live byte
+inspector, signature overlay, same-length replace, opt-in editing, undo/redo and
+backup-on-save. It also has readable byte listings that assemble back into the file, image
+themes, an optional AI assistant with reviewed patch proposals, GameForge project
+intelligence, DevFlow, a Project Navigator, a Test & Debug Center, a smart project diff and a
+declarative plugin SDK. A CPU disassembler, a debugger, a plugin *runtime* and code-signed
+installers are *not* present; see [docs/ROADMAP.md](docs/ROADMAP.md) for the honest status of
+every phase, [docs/CODE-LISTING.md](docs/CODE-LISTING.md) for what the Code tab does and does
+not do, and [docs/ORBIT.md](docs/ORBIT.md) for this release.
 
 ## What works today
 
 **Shell and workspace**
-- Activity bar with Explorer, project Search, Recent, GameForge, DevFlow and Help sections,
-  plus a resizable explorer tree backed by `QFileSystemModel`.
+- Activity bar with Explorer, project Search, Recent, GameForge, DevFlow, Project Navigator,
+  Test & Debug Center and Extension Studio sections, plus a resizable explorer tree backed by
+  `QFileSystemModel`.
 - Editor area with multiple tabs, per-file header strip (`read-only`, format, summary).
 - Bottom output console with a live log: level and text filters, optional timestamps, pause
   control, copy, confirmed clear, export, jump-to-source on double-click, and credential
@@ -89,6 +92,52 @@ see [its README](samples/gameforge-demo/README.md).
   containing folder, copy path and properties, shown only when actually supported.
 
 ![DevFlow dashboard for the bundled demo project](docs/screenshots/devflow-dashboard-1280x720.png)
+
+**Project Navigator (Orbit)**
+- One read-only index over project files, build targets, dependencies, configuration files,
+  portability source references, portability findings and the build errors DevFlow last
+  collected. Search and a kind filter narrow the tree; selecting an entity shows its evidence
+  and every relationship.
+- Every relationship has a confidence label: **confirmed** (stated in a build file or observed
+  by a scan), **inferred** (derived by a parser) or **weak** (name similarity only). Files and
+  lines open from the index, and limits/truncation are stated.
+
+![Project Navigator over the bundled demo project](docs/screenshots/navigator-1280x720.png)
+
+**Test & Debug Center (Orbit)**
+- Detects CTest/CMake test registration, GoogleTest, Catch2, pytest, an npm `test` script and
+  Cargo.toml. Only detected frameworks are listed; one without a runnable command shows why.
+- Runs the real command without a shell, streams output, supports cancellation, groups failures
+  by a normalised message, opens failing sources, keeps the last 60 runs in SQLite, compares
+  failure fingerprints with the previous run and exports a Markdown report.
+- Output that does not match a known format stays raw: no per-test result is invented.
+
+![Test & Debug Center with a detected CTest suite](docs/screenshots/test-center-1280x720.png)
+
+**Smart project diff and AI code actions (Orbit)**
+- Compares two folder states without writing to either: added/removed/modified/unchanged files,
+  configuration edits, dependency version changes, bounded binary differences with the first
+  differing offset, and portability deltas. Content hashing is bounded to 4 MiB per file, and a
+  sampled match is labelled rather than called identical. Markdown export.
+- AI actions: explain selected bytes, explain the last build error, suggest a refactoring,
+  generate documentation, and propose a complete file. Every patch opens a before/after diff
+  and requires explicit approval; a size-changing proposal can be saved but not applied in
+  place. Remote endpoints require a per-session confirmation before project content is sent.
+
+**Extension Studio (Orbit)**
+- Manifest editor with API version 1, permission audit, semantic-version and dependency checks,
+  manifest validation (including JSON entry parsing), a ready example plugin and checksummed
+  bundle export. Plugins are declarative only: **plugin code is never executed** and no
+  permission is granted at runtime. See [docs/PLUGIN-SDK.md](docs/PLUGIN-SDK.md).
+
+![Extension Studio editing the example manifest](docs/screenshots/plugin-studio-1280x720.png)
+
+**Onboarding**
+- A three-step welcome guide on first launch (skipped for screenshots and self-tests), with the
+  sample project and getting-started guide one click away. Empty states in the new workspaces
+  name the next action, and **F1** opens help for the active workspace.
+
+![PKG Studio welcome guide](docs/screenshots/onboarding-1280x720.png)
 
 **Analysis core**
 - Signature-based parser registry with a raw-bytes fallback and honest warnings for
@@ -197,7 +246,7 @@ see [its README](samples/gameforge-demo/README.md).
 
 ## Demo build and packaging
 
-This version is a **development demo build** (`0.10.0`): it is not code-signed, and
+This version is a **development demo build** (`0.11.0`): it is not code-signed, and
 **Help → Feature status** inside the application lists what is implemented, partial or
 experimental, and planned. The first screen includes synthetic ELF/APK samples and a sample
 project, works without the source tree, and **F1** opens the About screen with the version,
@@ -271,8 +320,8 @@ Generate the synthetic test corpus with `python3 tools/make_test_packages.py`. T
 self-created fixtures, not commercial packages.
 
 Diagnostic CLI options: `--screenshot <path>` (render the window and exit),
-`--screenshot-tab hex|analysis|inspector|structure|code|chat|gameforge`, and
-`--screenshot-dialog about|feature-status` to capture the About or Feature status dialog instead
+`--screenshot-tab hex|analysis|inspector|structure|code|chat|gameforge|devflow|navigator|tests|plugins`,
+and `--screenshot-dialog about|feature-status|ai|onboarding` to capture a dialog instead
 of the main window. A `gameforge` capture waits for the real background scan and analysis to
 finish, and `--screenshot-gameforge-tab inventory|graph|config|portability|intel` selects the
 tab. These exist so the same startup path can be verified headlessly and are also what produced

@@ -714,6 +714,33 @@ QString FileEditor::readableListing(quint64 maxBytes) const
     return listing ? listing.value() : QString();
 }
 
+bool FileEditor::hasSelection() const
+{
+    return m_hex != nullptr && m_hex->selectionLength() > 1;
+}
+
+QString FileEditor::selectionContext(quint64 maxBytes) const
+{
+    if (m_document == nullptr || m_hex == nullptr || m_hex->selectionLength() <= 1)
+        return {};
+    const quint64 start = m_hex->selectionStart();
+    const quint64 available = m_hex->selectionLength();
+    const quint64 length = std::min(maxBytes == 0 ? available : maxBytes, available);
+    auto listing = buildListing(*m_document, start, length, 16,
+                                QStringLiteral("selection: %1 bytes at offset 0x%2")
+                                    .arg(available)
+                                    .arg(start, 0, 16));
+    if (!listing)
+        return {};
+    QString text = listing.value();
+    if (length < available) {
+        text += QStringLiteral("\n[selection truncated to the first %1 of %2 bytes]")
+                    .arg(length)
+                    .arg(available);
+    }
+    return text;
+}
+
 void FileEditor::refreshCodeListing()
 {
     if (m_listingEdit == nullptr || m_document == nullptr)

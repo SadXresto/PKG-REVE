@@ -9,6 +9,7 @@
 #include "core/ProcessInfo.h"
 #include "data/ThemeManager.h"
 #include "devflow/DevFlowStore.h"
+#include "devflow/ErrorIntelligence.h"
 #include "ui/AboutDialog.h"
 #include "ui/ActivityBar.h"
 #include "ui/AiChatPanel.h"
@@ -22,10 +23,15 @@
 #include "ui/HexView.h"
 #include "ui/StructurePanel.h"
 #include "ui/OutputPanel.h"
+#include "ui/OnboardingDialog.h"
 #include "ui/PackageInfoView.h"
+#include "ui/PluginStudioPanel.h"
+#include "ui/ProjectDiffDialog.h"
+#include "ui/ProjectNavigatorPanel.h"
 #include "ui/RecentPanel.h"
 #include "ui/SearchPanel.h"
 #include "ui/SettingsDialog.h"
+#include "ui/TestCenterPanel.h"
 #include "ui/ThemeEditorDialog.h"
 #include "ui/WelcomePage.h"
 
@@ -261,6 +267,17 @@ void MainWindow::buildUi()
     m_activity->addItem(QStringLiteral("devflow"),
                         QStringLiteral("DevFlow: builds, errors, tasks, workflows"),
                         IconKind::DevFlow);
+    m_activity->addItem(QStringLiteral("navigator"),
+                        QStringLiteral("Project Navigator: files, targets, dependencies and "
+                                       "evidence"),
+                        IconKind::Navigator);
+    m_activity->addItem(QStringLiteral("tests"),
+                        QStringLiteral("Test & Debug Center: detected frameworks and real "
+                                       "runs"),
+                        IconKind::Tests);
+    m_activity->addItem(QStringLiteral("extensions"),
+                        QStringLiteral("Extension Studio: validate and package plugins"),
+                        IconKind::Plugins);
     m_activity->addStretch();
     m_activity->addItem(QStringLiteral("themes"), QStringLiteral("Theme editor"),
                         IconKind::Palette, false);
@@ -277,6 +294,13 @@ void MainWindow::buildUi()
     m_searchPanel = new SearchPanel(m_sideStack);
     m_recentPanel = new RecentPanel(m_sideStack);
     m_gameForge = new GameForgePanel(m_sideStack);
+    const auto resolveProjectPath = [this](const QString& path) {
+        const QFileInfo info(path);
+        if (info.isAbsolute())
+            return path;
+        return QDir(m_projectPath.isEmpty() ? QDir::currentPath() : m_projectPath)
+            .filePath(path);
+    };
     m_devFlow = new DevFlowPanel(
         m_database,
         DevFlowHooks{
@@ -304,10 +328,74 @@ void MainWindow::buildUi()
     m_sideStack->addWidget(m_explorer);
     m_sideStack->addWidget(m_searchPanel);
     m_sideStack->addWidget(m_recentPanel);
+    m_navigator = new ProjectNavigatorPanel(
+        NavigatorHooks{
+            [this]() { return m_projectPath; },
+            [this, resolveProjectPath](const QString& path, int line) {
+                const QString resolved = resolveProjectPath(path);
+                if (!QFileInfo(resolved).isFile()) {
+                    statusBar()->showMessage(
+                        QStringLiteral("Referenced file was not found: %1").arg(path), 5000);
+                    return;
+                }
+                openFile(resolved);
+                statusBar()->showMessage(
+                    line > 0 ? QStringLiteral("%1 \u00B7 line %2")
+                                   .arg(QFileInfo(resolved).fileName())
+                                   .arg(line)
+                             : QStringLiteral("Opened %1")
+                                   .arg(QFileInfo(resolved).fileName()),
+                    4000);
+            },
+            [this](const QString& message) { statusBar()->showMessage(message, 6000); },
+            [this]() { openProjectDialog(); }},
+        m_sideStack);
+    m_testCenter = new TestCenterPanel(
+        m_database,
+        TestCenterHooks{
+            [this]() { return m_projectPath; },
+            [this, resolveProjectPath](const QString& path, int line) {
+                const QString resolved = resolveProjectPath(path);
+                if (!QFileInfo(resolved).isFile()) {
+                    statusBar()->showMessage(
+                        QStringLiteral("Test source was not found: %1").arg(path), 5000);
+                    return;
+                }
+                openFile(resolved);
+                if (line > 0) {
+                    statusBar()->showMessage(
+                        QStringLiteral("%1 \u00B7 line %2")
+                            .arg(QFileInfo(resolved).fileName())
+                            .arg(line),
+                        4000);
+                }
+            },
+            [this](const QString& message) { statusBar()->showMessage(message, 6000); }},
+        m_sideStack);
+    m_pluginStudio = new PluginStudioPanel(m_sideStack);
     m_sideStack->addWidget(m_gameForge);
     m_sideStack->addWidget(m_devFlow);
+    m_sideStack->addWidget(m_navigator);
+    m_sideStack->addWidget(m_testCenter);
+    m_sideStack->addWidget(m_pluginStudio);
     connect(m_devFlow, &DevFlowPanel::statusMessage, this,
             [this](const QString& message) { statusBar()->showMessage(message, 6000); });
+    connect(m_devFlow, &DevFlowPanel::buildFinished, this,
+            [this](const QString& output, bool) {
+                const devflow::ErrorReport report = devflow::parseBuildOutput(output);
+                QVector<projectnav::ErrorInput> errors;
+                for (const devflow::DiagnosticGroup& group :
+                     devflow::groupDiagnostics(report.diagnostics)) {
+                    projectnav::ErrorInput input;
+                    input.fingerprint = group.fingerprint;
+                    input.file = group.file;
+                    input.line = group.line;
+                    input.severity = devflow::severityName(group.severity);
+                    input.message = group.message;
+                    errors.append(input);
+                }
+                m_navigator->setBuildErrors(errors);
+            });
     centralLayout->addWidget(m_sideStack);
 
     // Left pane: activity bar + stacked side panels. It is one child of the
@@ -346,6 +434,7 @@ void MainWindow::buildUi()
     // Right-hand AI chat, in the style of the chat panels in VS Code and
     // OpenCode. It follows the active editor and toggles with Ctrl+Shift+I.
     m_aiPanel = new AiChatPanel(m_database, [this]() { return currentEditor(); }, this);
+    m_aiPanel->setBuildErrorProvider([this]() { return m_devFlow->lastBuildOutput(); });
     m_aiDock = new QDockWidget(QStringLiteral("AI chat"), this);
     m_aiDock->setObjectName(QStringLiteral("aiChatDock"));
     m_aiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
@@ -361,7 +450,10 @@ void MainWindow::buildUi()
     m_samplesPath = findSamplesDirectory();
     m_welcome->setDemoSamples(!m_samplesPath.isEmpty(), m_samplesPath);
 
-    connect(m_activity, &ActivityBar::activated, this, &MainWindow::switchSidebar);
+    connect(m_activity, &ActivityBar::activated, this, [this](const QString& id) {
+        m_activeWorkspace = id;
+        switchSidebar(id);
+    });
     connect(m_explorer, &FileExplorer::fileActivated, this, [this](const QString& path) {
         openFile(path);
     });
@@ -656,6 +748,40 @@ void MainWindow::buildCommands()
                devflowCategory, QKeySequence(), [this]() {
                    showDevFlowWorkspace(QStringLiteral("workflows"));
                });
+
+    const QString projectCategory = QStringLiteral("Project intelligence");
+    addCommand(QStringLiteral("view.navigator"),
+               QStringLiteral("Project Navigator: project intelligence"), viewCategory,
+               QKeySequence(QStringLiteral("Ctrl+Shift+N")), [this]() {
+                   m_activeWorkspace = QStringLiteral("navigator");
+                   m_activity->setCurrent(QStringLiteral("navigator"));
+                   showProjectNavigator();
+               });
+    addCommand(QStringLiteral("view.tests"), QStringLiteral("Test & Debug Center"),
+               viewCategory, QKeySequence(QStringLiteral("Ctrl+Shift+T")), [this]() {
+                   m_activeWorkspace = QStringLiteral("tests");
+                   m_activity->setCurrent(QStringLiteral("tests"));
+                   showTestCenter();
+               });
+    addCommand(QStringLiteral("view.plugins"), QStringLiteral("Extension Studio"),
+               viewCategory, QKeySequence(), [this]() {
+                   m_activeWorkspace = QStringLiteral("extensions");
+                   m_activity->setCurrent(QStringLiteral("extensions"));
+                   showPluginStudio();
+               });
+    addCommand(QStringLiteral("project.diff"),
+               QStringLiteral("Smart project diff: compare two folder states\u2026"),
+               projectCategory, QKeySequence(), [this]() { showProjectDiff(); });
+    addCommand(QStringLiteral("project.sample"),
+               QStringLiteral("Project: open the GameForge sample project"), projectCategory,
+               QKeySequence(), [this]() { openSampleProject(); });
+    addCommand(QStringLiteral("ai.explainError"), QStringLiteral("AI: explain the last build error"),
+               projectCategory, QKeySequence(), [this]() { explainBuildErrorWithAi(); });
+    addCommand(QStringLiteral("help.onboarding"), QStringLiteral("Welcome guide"),
+               helpCategory, QKeySequence(), [this]() { showOnboarding(); });
+    addCommand(QStringLiteral("help.contextual"), QStringLiteral("Help for this workspace"),
+               helpCategory, QKeySequence(QStringLiteral("F1")),
+               [this]() { showContextHelp(); });
     addCommand(QStringLiteral("file.quickActions"),
                QStringLiteral("Quick actions for the active file\u2026"), fileCategory,
                QKeySequence(), [this]() { showQuickActions(); });
@@ -979,6 +1105,10 @@ void MainWindow::buildMenus()
     viewMenu->addAction(m_commands.value(QStringLiteral("view.search")));
     viewMenu->addAction(m_commands.value(QStringLiteral("view.recent")));
     viewMenu->addSeparator();
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.navigator")));
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.tests")));
+    viewMenu->addAction(m_commands.value(QStringLiteral("view.plugins")));
+    viewMenu->addSeparator();
     viewMenu->addAction(m_commands.value(QStringLiteral("view.togglePanel")));
     viewMenu->addAction(m_commands.value(QStringLiteral("view.structureBuilder")));
     QAction* lightweight = m_commands.value(QStringLiteral("view.lightweight"));
@@ -1004,6 +1134,12 @@ void MainWindow::buildMenus()
 
     auto* toolsMenu = menuBar()->addMenu(QStringLiteral("&Tools"));
     toolsMenu->addAction(m_commands.value(QStringLiteral("view.gameforge")));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("view.navigator")));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("view.tests")));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("view.plugins")));
+    toolsMenu->addSeparator();
+    toolsMenu->addAction(m_commands.value(QStringLiteral("project.diff")));
+    toolsMenu->addAction(m_commands.value(QStringLiteral("ai.explainError")));
     toolsMenu->addSeparator();
     toolsMenu->addAction(m_commands.value(QStringLiteral("tools.ai")));
     toolsMenu->addSeparator();
@@ -1018,7 +1154,9 @@ void MainWindow::buildMenus()
     toolsMenu->addAction(m_commands.value(QStringLiteral("tools.structureTemplateEdit")));
 
     auto* helpMenu = menuBar()->addMenu(QStringLiteral("&Help"));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.onboarding")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.guide")));
+    helpMenu->addAction(m_commands.value(QStringLiteral("help.contextual")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.shortcuts")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.structureTemplates")));
     helpMenu->addAction(m_commands.value(QStringLiteral("help.codeListing")));
@@ -1246,6 +1384,21 @@ void MainWindow::switchSidebar(const QString& id)
     if (id == QLatin1String("devflow")) {
         m_sideStack->setCurrentWidget(m_devFlow);
         m_devFlow->refresh();
+        return;
+    }
+    if (id == QLatin1String("navigator")) {
+        m_sideStack->setCurrentWidget(m_navigator);
+        m_navigator->refresh();
+        return;
+    }
+    if (id == QLatin1String("tests")) {
+        m_sideStack->setCurrentWidget(m_testCenter);
+        m_testCenter->refresh();
+        return;
+    }
+    if (id == QLatin1String("extensions")) {
+        m_sideStack->setCurrentWidget(m_pluginStudio);
+        m_pluginStudio->refresh();
         return;
     }
     m_sideStack->setCurrentWidget(m_explorer);
@@ -1629,7 +1782,14 @@ void MainWindow::openProject(const QString& path)
     setProjectPath(info.absoluteFilePath());
     switchSidebar(QStringLiteral("explorer"));
     m_activity->setCurrent(QStringLiteral("explorer"));
+    m_activeWorkspace = QStringLiteral("explorer");
     m_lastDirectory = info.absolutePath();
+    // The new project changes both indexes; refresh them lazily when shown, but
+    // drop stale data now so a screenshot never captures the previous project.
+    if (m_navigator != nullptr)
+        m_navigator->refresh();
+    if (m_testCenter != nullptr)
+        m_testCenter->refresh();
     logInfo(QString::fromLatin1(kLogCategory),
             QStringLiteral("Project opened: %1").arg(m_projectPath));
 }
@@ -1829,6 +1989,7 @@ QString MainWindow::showGameForgeWorkspace(const QString& tab)
     switchSidebar(QStringLiteral("gameforge"));
     if (m_activity != nullptr)
         m_activity->setCurrent(QStringLiteral("gameforge"));
+    m_activeWorkspace = QStringLiteral("gameforge");
     return title;
 }
 
@@ -2434,7 +2595,101 @@ QString MainWindow::showDevFlowWorkspace(const QString& tab)
     switchSidebar(QStringLiteral("devflow"));
     if (m_activity != nullptr)
         m_activity->setCurrent(QStringLiteral("devflow"));
+    m_activeWorkspace = QStringLiteral("devflow");
     return title;
+}
+
+QString MainWindow::showProjectNavigator()
+{
+    switchSidebar(QStringLiteral("navigator"));
+    if (m_activity != nullptr)
+        m_activity->setCurrent(QStringLiteral("navigator"));
+    m_activeWorkspace = QStringLiteral("navigator");
+    m_navigator->refresh();
+    return QStringLiteral("Project Navigator");
+}
+
+QString MainWindow::showTestCenter()
+{
+    switchSidebar(QStringLiteral("tests"));
+    if (m_activity != nullptr)
+        m_activity->setCurrent(QStringLiteral("tests"));
+    m_activeWorkspace = QStringLiteral("tests");
+    m_testCenter->refresh();
+    return QStringLiteral("Test & Debug Center");
+}
+
+QString MainWindow::showPluginStudio()
+{
+    switchSidebar(QStringLiteral("extensions"));
+    if (m_activity != nullptr)
+        m_activity->setCurrent(QStringLiteral("extensions"));
+    m_activeWorkspace = QStringLiteral("extensions");
+    m_pluginStudio->refresh();
+    return QStringLiteral("Extension Studio");
+}
+
+bool MainWindow::projectNavigatorReady() const
+{
+    return m_navigator != nullptr && m_navigator->isReady();
+}
+
+bool MainWindow::testCenterReady() const
+{
+    return m_testCenter != nullptr && m_testCenter->isReady();
+}
+
+void MainWindow::showProjectDiff()
+{
+    ProjectDiffDialog dialog(this);
+    dialog.setFolders(m_projectPath, QString());
+    dialog.exec();
+}
+
+void MainWindow::showOnboarding()
+{
+    OnboardingDialog dialog(QApplication::applicationVersion(), this);
+    connect(&dialog, &OnboardingDialog::sampleProjectRequested, this,
+            [this]() { openSampleProject(); });
+    connect(&dialog, &OnboardingDialog::gettingStartedRequested, this,
+            [this]() { showHelpTopic(QStringLiteral("help.guide")); });
+    dialog.exec();
+    m_database.setSetting(QStringLiteral("ui.onboarded"),
+                          dialog.showOnFirstLaunch() ? QStringLiteral("false")
+                                                     : QStringLiteral("true"));
+}
+
+void MainWindow::showContextHelp()
+{
+    QString topic = QStringLiteral("help.guide");
+    if (m_activeWorkspace == QLatin1String("navigator"))
+        topic = QStringLiteral("help.navigator");
+    else if (m_activeWorkspace == QLatin1String("tests"))
+        topic = QStringLiteral("help.tests");
+    else if (m_activeWorkspace == QLatin1String("extensions"))
+        topic = QStringLiteral("help.plugins");
+    else if (m_activeWorkspace == QLatin1String("gameforge"))
+        topic = QStringLiteral("help.gameforge");
+    else if (m_activeWorkspace == QLatin1String("devflow"))
+        topic = QStringLiteral("help.devflow");
+    else if (m_activeWorkspace == QLatin1String("search"))
+        topic = QStringLiteral("help.shortcuts");
+    else if (m_activeWorkspace == QLatin1String("explorer"))
+        topic = QStringLiteral("help.guide");
+    showHelpTopic(topic);
+}
+
+void MainWindow::explainBuildErrorWithAi()
+{
+    if (m_aiDock == nullptr)
+        return;
+    if (!m_aiDock->isVisible()) {
+        m_aiDock->show();
+        m_aiDock->raise();
+        resizeDocks({m_aiDock}, {420}, Qt::Horizontal);
+    }
+    m_aiPanel->refreshContext();
+    m_aiPanel->explainLastBuildError();
 }
 
 void MainWindow::showQuickActions()

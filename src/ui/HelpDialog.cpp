@@ -140,6 +140,22 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
                   "parsing with file:line evidence, a zoomable dependency graph with "
                   "declared-versus-inferred edges, cycle and unresolved-dependency "
                   "reporting, and Windows/Linux/architecture/API porting intelligence.</li>"
+                  "<li>DevFlow: stored build profiles with real cmake/meson/make execution, "
+                  "error intelligence, tasks, snapshots, health checks and workflows.</li>"
+                  "<li>Project Navigator: one index over files, build targets, dependencies, "
+                  "configuration files, source references, portability findings and build "
+                  "errors, with a confidence label and evidence on every relationship.</li>"
+                  "<li>Test &amp; Debug Center: detects CTest, GoogleTest, Catch2, pytest, npm "
+                  "test and cargo test; runs only detected frameworks; groups failures, "
+                  "keeps a local regression history and exports a report.</li>"
+                  "<li>Smart project diff: added/removed/modified files, configuration edits, "
+                  "dependency changes, bounded binary differences and portability deltas, "
+                  "with Markdown export.</li>"
+                  "<li>Extension Studio: manifest editor, permission audit, dependency and "
+                  "version checks, example plugin and checksummed bundle export.</li>"
+                  "<li>AI code actions: explain a selection, explain build output, suggest a "
+                  "refactoring or documentation, and propose a complete file; every proposal "
+                  "is reviewed as a diff and needs explicit approval.</li>"
                   "</ul>"
                   "<h3>Partial or experimental</h3>"
                   "<ul>"
@@ -160,6 +176,18 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
                   "<li>GameForge portability findings are textual API matches in source-like "
                   "files. They are not a build, not an automatic port, and they do not read "
                   "generated, compressed, encrypted or oversized files.</li>"
+                  "<li>Patch proposals can only be applied when they keep the file size; this "
+                  "build edits existing bytes. A size-changing proposal can be saved as a "
+                  "separate file but is never written over the open document.</li>"
+                  "<li>Plugins are declarative only: manifests are validated, audited and "
+                  "packaged, but plugin code is not loaded or executed and no permission is "
+                  "granted at runtime.</li>"
+                  "<li>The Test Center runs the framework command that was detected; "
+                  "GoogleTest and Catch2 run through CTest and need a configured build "
+                  "folder. Output that does not match a known format is shown raw and is "
+                  "not turned into invented test results.</li>"
+                  "<li>Project diff hashes at most 4 MiB per file; a same-size match beyond "
+                  "that is labelled as sampled rather than identical.</li>"
                   "</ul>"
                   "<h3>Planned, not present</h3>"
                   "<ul>"
@@ -334,6 +362,121 @@ QVector<HelpDialog::Topic> HelpDialog::topics()
                   "profiling, build execution, project export and a game-aware AI preset. "
                   "They are listed as planned in <i>Feature status</i> and never shown as "
                   "working controls.</p>"))});
+
+    topics.append(
+        {QStringLiteral("help.navigator"), QStringLiteral("Project Navigator"),
+         QStringLiteral("Files, targets, dependencies, findings and errors in one index."),
+         page(QStringLiteral("Project Navigator"),
+              QStringLiteral(
+                  "<p>The Navigator indexes the open project folder: files from the bounded "
+                  "scan, build targets and dependencies parsed from CMake/Meson/Makefile "
+                  "files, configuration files, portability source references and the build "
+                  "errors DevFlow last collected.</p>"
+                  "<h3>Confidence is explicit</h3>"
+                  "<p><b>Confirmed</b> means the relationship is stated literally in a "
+                  "build file or observed in a scan. <b>Inferred</b> means it was derived "
+                  "(a target source that the scanner did not index, a graph edge the parser "
+                  "derived). <b>Weak</b> means only a name similarity was noticed; no build "
+                  "file states it.</p>"
+                  "<h3>Navigating</h3>"
+                  "<p>Search filters entities by name, detail, path or kind. Selecting an "
+                  "entity shows its evidence and every relationship; double-clicking an "
+                  "entity or a related row opens its file and reports the line. Nothing is "
+                  "modified and the project is never scanned in place.</p>"
+                  "<p>Limits: 2000 files, 4000 entities, 8000 relationships and 400 build "
+                  "errors. A capped index says so and never claims to be complete.</p>"))});
+
+    topics.append(
+        {QStringLiteral("help.tests"), QStringLiteral("Test & Debug Center"),
+         QStringLiteral("Detected frameworks, real runs, grouped failures and history."),
+         page(QStringLiteral("Test & Debug Center"),
+              QStringLiteral(
+                  "<p>The Test Center inspects the project and lists only frameworks that "
+                  "are actually present: CTest registration (<code>enable_testing</code> / "
+                  "<code>add_test</code> / a CTestTestfile.cmake in a configured build "
+                  "folder), GoogleTest, Catch2, pytest, an npm <code>test</code> script and "
+                  "Cargo.toml.</p>"
+                  "<p><b>Runs are real</b>: the detected program is started without a shell, "
+                  "its output is streamed, and Cancel terminates the process (killing it after "
+                  "a short grace period). A framework that is detected but cannot run is "
+                  "listed with the reason instead of a disabled-looking button.</p>"
+                  "<p>Parsed results show pass/fail/skip counts and group failures by their "
+                  "normalised message. Double-click a failure to open its source. If the "
+                  "output does not match a supported format, it is shown raw and no "
+                  "per-test result is invented.</p>"
+                  "<p><b>Regression history</b> keeps the last 60 runs in the local SQLite "
+                  "database and compares failure fingerprints with the previous run of the "
+                  "same framework. <b>Export report</b> writes Markdown with the command, "
+                  "counts, grouped failures and bounded raw output. Nothing leaves the "
+                  "machine.</p>"))});
+
+    topics.append(
+        {QStringLiteral("help.diff"), QStringLiteral("Smart project diff"),
+         QStringLiteral("Compare two project states without modifying either."),
+         page(QStringLiteral("Smart project diff"),
+              QStringLiteral(
+                  "<p><i>Tools &rarr; Smart project diff</i> compares two folder trees. "
+                  "Files are classified as added, removed, modified or unchanged by size and "
+                  "a bounded SHA-256 sample (4 MiB per file). When a same-size match was only "
+                  "sampled, it is labelled as such instead of being called identical.</p>"
+                  "<p>The report separates <b>configuration changes</b> (CMake, Meson, "
+                  "Makefile, project.godot, *.uproject) with isolated added/removed lines, "
+                  "<b>dependency changes</b> parsed from both build configurations, "
+                  "<b>binary differences</b> with the first differing offset where the file "
+                  "was compared, and <b>portability deltas</b> (per-finding occurrence "
+                  "changes).</p>"
+                  "<p>VCS, build output and node_modules folders are skipped; limits and "
+                  "cancellation are reported in the Notes tab. Neither tree is written to. "
+                  "<i>Export report</i> writes a Markdown file.</p>"))});
+
+    topics.append(
+        {QStringLiteral("help.plugins"), QStringLiteral("Extension Studio and plugin SDK"),
+         QStringLiteral("Manifest API version 1, permissions, validation and packaging."),
+         page(QStringLiteral("Extension Studio"),
+              QStringLiteral(
+                  "<p>The Extension Studio edits plugin manifests stored under the "
+                  "application data directory in <code>plugins/&lt;id&gt;/plugin.json</code>. "
+                  "<i>Create example plugin</i> writes a valid example, its declarative "
+                  "action file and the SDK README.</p>"
+                  "<h3>Validation</h3>"
+                  "<p>Validation checks the id format, a semantic version, API version 1, "
+                  "that the entry file is relative, exists, stays inside the plugin folder "
+                  "and parses when it is JSON, that every declared permission is known, and "
+                  "that dependencies are installed at a sufficient version. Warnings (such "
+                  "as <code>process.spawn</code>) do not block packaging.</p>"
+                  "<h3>What plugins can and cannot do</h3>"
+                  "<p><b>This build does not execute plugin code.</b> A permission is a "
+                  "declaration for review, not a runtime grant. The Studio never loads, "
+                  "links, interprets or runs a plugin, and no plugin can read files, open a "
+                  "socket or start a process through PKG Studio.</p>"
+                  "<h3>Export</h3>"
+                  "<p>Export copies the plugin into "
+                  "<code>&lt;id&gt;-&lt;version&gt;/</code> with a normalised "
+                  "<code>manifest.json</code> and a <code>SHA256SUMS.txt</code> covering "
+                  "every copied file. Files above 25 MiB are skipped and reported. The source "
+                  "folder is not modified.</p>"))});
+
+    topics.append(
+        {QStringLiteral("help.devflow"), QStringLiteral("DevFlow workspace"),
+         QStringLiteral("Builds, error intelligence, tasks, snapshots, health and workflows."),
+         page(QStringLiteral("DevFlow workspace"),
+              QStringLiteral(
+                  "<p>DevFlow (Ctrl+Shift+D) stores its profiles, tasks, snapshots, "
+                  "workflows and resolution state in the local SQLite database (table "
+                  "<code>devflow</code>).</p>"
+                  "<h3>Builds</h3>"
+                  "<p>Build profiles run the real tool for the selected system "
+                  "(cmake/meson/make) with a program and argument list, never through a "
+                  "shell. The exact command and working directory are shown for confirmation "
+                  "before anything starts; CMake profiles need a pre-configured build folder. "
+                  "Output is streamed and parsed into grouped diagnostics.</p>"
+                  "<h3>Everything else</h3>"
+                  "<p>Error intelligence explains common diagnostic text locally and keeps "
+                  "resolved fingerprints. The task board is stored in SQLite. Snapshots "
+                  "capture open files, the active tab, sidebar and splitter sizes, and crash "
+                  "recovery offers the last autosave. Health checks report evidence with a "
+                  "confidence label and are explicitly not a score. Workflows are fixed, "
+                  "read-only steps that end in a Markdown report under the data directory.</p>"))});
 
     topics.append(
         {QStringLiteral("help.limitations"), QStringLiteral("Limitations and honest scope"),

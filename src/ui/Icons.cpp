@@ -93,6 +93,39 @@ QIcon makeIcon(IconKind kind, const QColor& color, int size)
         painter.drawLine(QPointF(s * 0.44, s * 0.74), QPointF(s * 0.56, s * 0.5));
         break;
     }
+    case IconKind::Navigator: {
+        // Index: one root node linked to three children.
+        painter.drawEllipse(QPointF(s * 0.5, s * 0.2), s * 0.09, s * 0.09);
+        painter.drawEllipse(QPointF(s * 0.22, s * 0.72), s * 0.08, s * 0.08);
+        painter.drawEllipse(QPointF(s * 0.5, s * 0.78), s * 0.08, s * 0.08);
+        painter.drawEllipse(QPointF(s * 0.78, s * 0.62), s * 0.08, s * 0.08);
+        painter.drawLine(QPointF(s * 0.44, s * 0.29), QPointF(s * 0.26, s * 0.64));
+        painter.drawLine(QPointF(s * 0.5, s * 0.29), QPointF(s * 0.5, s * 0.7));
+        painter.drawLine(QPointF(s * 0.56, s * 0.29), QPointF(s * 0.74, s * 0.55));
+        break;
+    }
+    case IconKind::Tests: {
+        // Checklist with a tick.
+        painter.drawRoundedRect(QRectF(s * 0.18, s * 0.14, s * 0.64, s * 0.72), s * 0.07, s * 0.07);
+        painter.drawLine(QPointF(s * 0.32, s * 0.4), QPointF(s * 0.42, s * 0.5));
+        painter.drawLine(QPointF(s * 0.42, s * 0.5), QPointF(s * 0.62, s * 0.3));
+        painter.drawLine(QPointF(s * 0.32, s * 0.66), QPointF(s * 0.68, s * 0.66));
+        break;
+    }
+    case IconKind::Plugins: {
+        // Puzzle piece: a square with one notch and one tab.
+        QPainterPath piece;
+        piece.moveTo(s * 0.2, s * 0.24);
+        piece.lineTo(s * 0.42, s * 0.24);
+        piece.arcTo(QRectF(s * 0.36, s * 0.1, s * 0.28, s * 0.28), 180.0, -180.0);
+        piece.lineTo(s * 0.7, s * 0.4);
+        piece.arcTo(QRectF(s * 0.62, s * 0.34, s * 0.28, s * 0.28), 270.0, -180.0);
+        piece.lineTo(s * 0.7, s * 0.8);
+        piece.lineTo(s * 0.2, s * 0.8);
+        piece.closeSubpath();
+        painter.drawPath(piece);
+        break;
+    }
     case IconKind::Close: {
         painter.drawLine(QPointF(s * 0.3, s * 0.3), QPointF(s * 0.7, s * 0.7));
         painter.drawLine(QPointF(s * 0.7, s * 0.3), QPointF(s * 0.3, s * 0.7));
